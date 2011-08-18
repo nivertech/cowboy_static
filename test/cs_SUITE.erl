@@ -47,8 +47,7 @@ init_per_group(static, Config) ->
     Dir = static_dir(Config),
     Dispatch = [{
         [<<"localhost">>], [
-            {[<<"static">>, '_'], cowboy_sendfile, [
-                {dir, Dir}, {prefix, [<<"static">>]}]}]}],
+            {['*'], cowboy_sendfile, [{dir, Dir}]}]}],
     cowboy:start_listener(http, 100,
         cowboy_tcp_transport, [{port, Port}],
         cowboy_http_protocol, [{dispatch, Dispatch}]),
@@ -59,13 +58,13 @@ end_per_group(static, _Config) ->
     ok.
 
 empty_file(Config) ->
-    ?line(URL = build_url("/static/empty_file", Config)),
+    ?line(URL = build_url("/empty_file", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 200, "OK"} = Status),
     ?line("" = Body).
 
 non_existing_file(Config) ->
-    ?line(URL = build_url("/static/non_existing", Config)),
+    ?line(URL = build_url("/non_existing", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 404, "Not Found"} = Status).
 

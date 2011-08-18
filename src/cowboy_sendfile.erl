@@ -39,9 +39,9 @@ handle_request(Req0, #state{dir=Dir, prefix=Prefix}=State) ->
     {Path0, Req1} = cowboy_http_req:path(Req0),
     Path1 = strip_prefix(Prefix, Path0),
     AbsPath = abs_path(Dir, Path1),
-    AbsPath =/= invalid orelse throw({code, 404, "File not found", Req1}),
+    AbsPath =/= invalid orelse throw({code, 403, <<"Permission denied">>, Req1}),
     WithinDir = lists:prefix(Dir, AbsPath),
-    WithinDir orelse throw({code, 404, "File not found", Req1}),
+    WithinDir orelse throw({code, 403, <<"Permission denied">>, Req1}),
     case file:open(filename:join(AbsPath), [read, binary, raw]) of
         {ok, FD} ->
             {ok, Req1, State#state{fd=FD}};

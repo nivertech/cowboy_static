@@ -22,7 +22,8 @@
 
 %% test functions
 -export([empty_file/1,
-         non_existing_file/1]).
+         non_existing_file/1,
+         below_static_root/1]).
 
 all() ->
     [{group, static}].
@@ -30,7 +31,9 @@ all() ->
 groups() ->
     [{static, [], [
         empty_file,
-        non_existing_file]}].
+        non_existing_file,
+        below_static_root
+    ]}].
 
 init_per_suite(Config) ->
     application:start(inets),
@@ -47,7 +50,7 @@ init_per_group(static, Config) ->
     Dir = static_dir(Config),
     Dispatch = [{
         [<<"localhost">>], [
-            {['*'], cowboy_sendfile, [{dir, Dir}]}]}],
+            {['...'], cowboy_sendfile, [{dir, Dir}]}]}],
     cowboy:start_listener(http, 100,
         cowboy_tcp_transport, [{port, Port}],
         cowboy_http_protocol, [{dispatch, Dispatch}]),
@@ -67,6 +70,11 @@ non_existing_file(Config) ->
     ?line(URL = build_url("/non_existing", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 404, "Not Found"} = Status).
+
+below_static_root(Config) ->
+    ?line(URL = build_url("/../cs_SUITE.erl", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
 
 static_dir(Config) ->
     Datadir = ?config(data_dir, Config),

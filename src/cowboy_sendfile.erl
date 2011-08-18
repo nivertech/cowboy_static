@@ -4,8 +4,6 @@
 %% cowboy callbacks
 -export([init/3, handle/2, terminate/2]).
 
--type opt() :: {dir, string()}.
-
 -record(state, {
     dir :: [string()]}).
 
@@ -44,10 +42,13 @@ abs_path_([], Stack) ->
 abs_path_test_() ->
     TestDir = ["tmp", "static"],
     Tests = [
+        %% Tests for ..
         {["tmp", "static", "foo.css"], ["foo.css"]},
         {["tmp", "foo.css"], ["..", "foo.css"]},
         {["foo.css"], ["..", "..", "foo.css"]},
-        {invalid, ["..", "..", "..", "foo.css"]}
+        {invalid, ["..", "..", "..", "foo.css"]},
+        %% Tests for .
+        {["tmp", "static", "foo.css"], [".", "foo.css"]}
     ],
     [?_assertEqual(Exp, abs_path(TestDir, Path)) || {Exp, Path} <- Tests].
 

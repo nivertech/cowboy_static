@@ -1,0 +1,8 @@
+{application, cowboy_sendfile, [
+    {description, "Cowboy handler for serving static files using sendfile"},
+    {vsn, "0.1.0"},
+    {modules, []},
+    {registered, []},
+    {applications, [kernel, stdlib, sendfile]},
+    {agner, {requires, []}}
+]}.

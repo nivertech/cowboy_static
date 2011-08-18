@@ -21,14 +21,16 @@
          init_per_group/2, end_per_group/2]).
 
 %% test functions
--export([empty_file/1]).
+-export([empty_file/1,
+         non_existing_file/1]).
 
 all() ->
     [{group, static}].
 
 groups() ->
     [{static, [], [
-        empty_file]}].
+        empty_file,
+        non_existing_file]}].
 
 init_per_suite(Config) ->
     application:start(inets),
@@ -60,8 +62,12 @@ empty_file(Config) ->
     ?line(URL = build_url("/static/empty_file", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 200, "OK"} = Status),
-    ?line("" = Body),
-    ok.
+    ?line("" = Body).
+
+non_existing_file(Config) ->
+    ?line(URL = build_url("/static/non_existing", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 404, "Not Found"} = Status).
 
 static_dir(Config) ->
     Datadir = ?config(data_dir, Config),

@@ -24,7 +24,8 @@
 -export([empty_file/1,
          non_existing_file/1,
          below_static_root/1,
-         subdir_not_listed/1]).
+         subdir_not_listed/1,
+         subdir_file_access/1]).
 
 all() ->
     [{group, static}].
@@ -34,7 +35,8 @@ groups() ->
         empty_file,
         non_existing_file,
         below_static_root,
-        subdir_not_listed
+        subdir_not_listed,
+        subdir_file_access
     ]}].
 
 init_per_suite(Config) ->
@@ -82,6 +84,13 @@ subdir_not_listed(Config) ->
     ?line(URL = build_url("/subdir", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
+
+subdir_file_access(Config) ->
+    ?line(URL = build_url("/subdir/subfile", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 200, "OK"} = Status),
+    %% TODO: It appears as if either cowboy_sendfile or httpc appends \n
+    ?line("subfile-contents\n" = Body).
 
 static_dir(Config) ->
     Datadir = ?config(data_dir, Config),

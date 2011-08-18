@@ -23,7 +23,8 @@
 %% test functions
 -export([empty_file/1,
          non_existing_file/1,
-         below_static_root/1]).
+         below_static_root/1,
+         subdir_not_listed/1]).
 
 all() ->
     [{group, static}].
@@ -32,7 +33,8 @@ groups() ->
     [{static, [], [
         empty_file,
         non_existing_file,
-        below_static_root
+        below_static_root,
+        subdir_not_listed
     ]}].
 
 init_per_suite(Config) ->
@@ -73,6 +75,11 @@ non_existing_file(Config) ->
 
 below_static_root(Config) ->
     ?line(URL = build_url("/../cs_SUITE.erl", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
+
+subdir_not_listed(Config) ->
+    ?line(URL = build_url("/subdir", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
 

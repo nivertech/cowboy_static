@@ -47,6 +47,8 @@ handle_request(Req0, #state{dir=Dir, prefix=Prefix}=State) ->
             {ok, Req1, State#state{fd=FD}};
         {error, eacces} ->
             throw({code, 403, <<"Permission denied">>, Req1});
+        {error, eisdir} ->
+            throw({code, 403, <<"Permission denied">>, Req1});
         {error, enoent} ->
             throw({code, 404, <<"File not found">>, Req1});
         {error, Reason} ->

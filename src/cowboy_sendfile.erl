@@ -5,15 +5,14 @@
 -export([init/3, handle/2, terminate/2]).
 
 -record(state, {
-    dir :: [string()],
+    dir :: [binary()],
     chunk_size :: pos_integer(),
     fd  :: term()}).
 
 init({tcp, http}, Req, Opts) ->
-    {dir, Dir} = lists:keyfind(dir, 1, Opts),
-    {chunk_size, Size} = lists:keyfind(chunk_size, 1, Opts),
-    Dir1 = filename:split(Dir),
-    {ok, Req, #state{dir=Dir1, chunk_size=Size}}.
+    {_, Dir} = lists:keyfind(dir, 1, Opts),
+    {_, Size} = lists:keyfind(chunk_size, 1, Opts),
+    {ok, Req, #state{dir=Dir, chunk_size=Size}}.
 
 handle(Req0, State0) ->
     try handle_request(Req0, State0) of
@@ -48,16 +47,18 @@ terminate(_Req, _State) ->
 
 
 %% @private Return an absolute file path based on the static file root.
--spec abs_path(Dir::[string()], Path::[string()]) -> [string()].
+-spec abs_path(Dir::[binary()], Path::[binary()]) -> [binary()].
 abs_path(Dir, Path) ->
     Path0 = Dir ++ Path,
     abs_path_(Path0, []).
 
-abs_path_(["."|T], Stack) ->
+%% @private Normalize a path, removing all occurances of . and ..
+-spec abs_path_(Path::[binary()], Stack::[binary()]) -> [binary()].
+abs_path_([<<".">>|T], Stack) ->
     abs_path_(T, Stack);
-abs_path_([".."|T], [_|Stack]) ->
+abs_path_([<<"..">>|T], [_|Stack]) ->
     abs_path_(T, Stack);
-abs_path_([".."|_], _Stack) ->
+abs_path_([<<"..">>|_], _Stack) ->
     invalid;
 abs_path_([H|T], Stack) ->
     abs_path_(T, [H|Stack]);
@@ -80,19 +81,16 @@ send_chunked_reply(FD, Size, Req, State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 abs_path_test_() ->
-    TestDir = ["tmp", "static"],
+    TestDir = [<<"tmp">>, <<"static">>],
     Tests = [
         %% Tests for ..
-        {["tmp", "static", "foo.css"], ["foo.css"]},
-        {["tmp", "foo.css"], ["..", "foo.css"]},
-        {["foo.css"], ["..", "..", "foo.css"]},
-        {invalid, ["..", "..", "..", "foo.css"]},
+        {[<<"tmp">>, <<"static">>, <<"foo.css">>], [<<"foo.css">>]},
+        {[<<"tmp">>, <<"foo.css">>], [<<"..">>, <<"foo.css">>]},
+        {[<<"foo.css">>], [<<"..">>, <<"..">>, <<"foo.css">>]},
+        {invalid, [<<"..">>, <<"..">>, <<"..">>, <<"foo.css">>]},
         %% Tests for .
-        {["tmp", "static", "foo.css"], [".", "foo.css"]}
+        {[<<"tmp">>, <<"static">>, <<"foo.css">>], [<<".">>, <<"foo.css">>]}
     ],
     [?_assertEqual(Exp, abs_path(TestDir, Path)) || {Exp, Path} <- Tests].
 
 -endif.
-    
-
-

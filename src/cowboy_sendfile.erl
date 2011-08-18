@@ -70,9 +70,6 @@ send_chunked_reply(FD, Size, Req, State) ->
         eof ->
             ok = file:close(FD),
             {ok, Req, State#state{fd=undefined}};
-        {ok, <<>>} ->
-            ok = file:close(FD),
-            {ok, Req, State#state{fd=undefined}};
         {ok, Data} ->
             ok = cowboy_http_req:chunk(Data, Req),
             send_chunked_reply(FD, Size, Req, State)

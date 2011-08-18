@@ -48,7 +48,6 @@ handle_request(Req0, #state{dir=Dir, prefix=Prefix}=State) ->
         {error, eacces} ->
             throw({code, 403, <<"Permission denied">>, Req1});
         {error, enoent} ->
-            io:format("~w~n", [{path, AbsPath}]),
             throw({code, 404, <<"File not found">>, Req1});
         {error, Reason} ->
             throw({code, 500, ["Error opening file: ", Reason], Req1})

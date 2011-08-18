@@ -6,13 +6,21 @@
 
 -record(state, {
     dir :: [binary()],
+    prefix :: [binary()],
     chunk_size :: pos_integer(),
     fd  :: term()}).
 
 init({tcp, http}, Req, Opts) ->
     {_, Dir} = lists:keyfind(dir, 1, Opts),
-    {_, Size} = lists:keyfind(chunk_size, 1, Opts),
-    {ok, Req, #state{dir=Dir, chunk_size=Size}}.
+    Size = case lists:keyfind(chunk_size, 1, Opts) of
+        {_, ISize} -> ISize;
+        false -> 10240
+    end,
+    Prefix = case lists:keyfind(prefix, 1, Opts) of
+        {_, IPrefix} -> IPrefix;
+        false -> []
+    end,
+    {ok, Req, #state{dir=Dir, chunk_size=Size, prefix=Prefix}}.
 
 handle(Req0, State0) ->
     try handle_request(Req0, State0) of
@@ -27,9 +35,10 @@ handle(Req0, State0) ->
     end.
 
 %% @private Handle a request for static files.
-handle_request(Req0, #state{dir=Dir}=State) ->
-    {Path, Req1} = cowboy_http_req:path(Req0),
-    AbsPath = abs_path(Dir, Path),
+handle_request(Req0, #state{dir=Dir, prefix=Prefix}=State) ->
+    {Path0, Req1} = cowboy_http_req:path(Req0),
+    Path1 = strip_prefix(Prefix, Path0),
+    AbsPath = abs_path(Dir, Path1),
     AbsPath =/= invalid orelse throw({code, 404, "File not found", Req1}),
     WithinDir = lists:prefix(Dir, AbsPath),
     WithinDir orelse throw({code, 404, "File not found", Req1}),
@@ -39,6 +48,7 @@ handle_request(Req0, #state{dir=Dir}=State) ->
         {error, eacces} ->
             throw({code, 403, <<"Permission denied">>, Req1});
         {error, enoent} ->
+            io:format("~w~n", [{path, AbsPath}]),
             throw({code, 404, <<"File not found">>, Req1});
         {error, Reason} ->
             throw({code, 500, ["Error opening file: ", Reason], Req1})
@@ -66,6 +76,14 @@ abs_path_([H|T], Stack) ->
     abs_path_(T, [H|Stack]);
 abs_path_([], Stack) ->
     lists:reverse(Stack).
+
+
+%% @private Strip a prefix from a path.
+-spec strip_prefix(Prefix::[binary()], Path::[binary()]) -> [binary()].
+strip_prefix([], Path) ->
+    Path;
+strip_prefix([H|Pref], [H|Path]) ->
+    strip_prefix(Pref, Path).
 
 %% @private Send the contents of a file to a client.
 send_chunked_reply(FD, Size, Req, State) ->

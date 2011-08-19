@@ -14,7 +14,8 @@
 
 -module(cs_ascii).
 -export([make/2,
-         read/2]).
+         read/2,
+         write_file/2]).
 
 -record(rfile, {size, chars, rstate}).
 
@@ -29,7 +30,7 @@ make(Size, Chars) ->
 read(_Chars, #rfile{size=0}) ->
     eof;
 read(N, #rfile{size=Size, chars=Chars, rstate=RState}=RFile) ->
-    NChars = if Chars > Size -> Size; true -> Chars end,
+    NChars = if N > Size -> Size; true -> N end,
     {Data, NewRState} = read_(NChars, Chars, RState, <<>>),
     {Data, RFile#rfile{size=Size-NChars, rstate=NewRState}}.
 
@@ -39,6 +40,23 @@ read_(N, Chars, RState, Acc) ->
     {Pos, NewRState} = random:uniform_s(byte_size(Chars), RState),
     Char = binary:at(Chars, Pos-1),
     read_(N - 1, Chars, NewRState, <<Acc/binary, Char>>).
+
+
+%% @doc Write the contents of a file generator to a file.
+-spec write_file(#rfile{}, string()) -> ok.
+write_file(RFile, File) ->
+    {ok, FD} = file:open(File, [write,append,exclusive]),
+    write_file_(RFile, FD).
+
+write_file_(RFile, FD) ->
+    case read(4096, RFile) of
+        eof ->
+            file:close(FD);
+        {Data, NewRFile} ->
+            ok = file:write(FD, Data),
+            write_file_(NewRFile, FD)
+    end.
+
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -57,5 +75,24 @@ twochar_test() ->
     O = fun({E, _}) -> timer:sleep(1), E end,
     Outputs = [O(?MODULE:read(2, make(2, <<"ab">>))) || _ <- lists:seq(1, 16)],
     ?assertEqual([<<A,B>> || A <- "ab", B <- "ab"], lists:usort(Outputs)).
+
+write_file_test_() ->
+    Dir = test_server:temp_name("/tmp/cowboy_sendfile."),
+    File = Dir ++ "/file",
+    {setup,local,
+        _Setup=fun() ->
+            ok = file:make_dir(Dir)
+        end,
+        _Teardown=fun(_) ->
+            ok = file:delete(File),
+            ok = file:del_dir(Dir)
+        end,
+        ?_test(begin
+            RFile = make(9999, <<"abcd1234">>),
+            ok = ?MODULE:write_file(RFile, File),
+            {ok, FData} = file:read_file(File),
+            {RData, _} = read(9999, RFile),
+            ?assertEqual(RData, FData)
+        end)}.
 
 -endif.

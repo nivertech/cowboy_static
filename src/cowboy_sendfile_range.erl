@@ -48,10 +48,12 @@ parse_range_spec(ElemBin, ContentLength) ->
             error
     end.
 
--spec valid_range_spec(uint(), uint(), uint(), uint()) ->
-          {uint(), uint(), uint()}.
-valid_range_spec(Start, End, Length, _Content) ->
-    {Start, End, Length}.
+-spec valid_range_spec(uint(), uint(), uint(), uint()) -> {uint(), uint(), uint()}.
+valid_range_spec(Start, End, Length, ContentLength)
+when Start >= 0, Start < End, End < ContentLength ->
+    {Start, End, Length};
+valid_range_spec(_Start, _End, _Length, _ContentLength) ->
+    error.
 
 -spec binary_to_integer(binary()) -> non_neg_integer().
 binary_to_integer(<<>>) ->

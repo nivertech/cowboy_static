@@ -40,8 +40,10 @@ handle_request(Req0, #state{dir=Dir, prefix=Prefix}=State) ->
     Path1 = strip_prefix(Prefix, Path0),
     AbsPath = abs_path(Dir, Path1),
     AbsPath =/= invalid orelse throw({code, 403, <<"Permission denied">>, Req1}),
-    WithinDir = lists:prefix(Dir, AbsPath),
-    WithinDir orelse throw({code, 403, <<"Permission denied">>, Req1}),
+    case lists:prefix(Dir, AbsPath) of
+        true -> ok;
+        false -> throw({code, 403, <<"Permission denied">>, Req1})
+    end,
     case file:open(filename:join(AbsPath), [read, binary, raw]) of
         {ok, FD} ->
             {ok, Req1, State#state{fd=FD}};

@@ -25,8 +25,7 @@ init({tcp, http}, Req, Opts) ->
 handle(Req0, State0) ->
     try handle_request(Req0, State0) of
         {ok, Req1, #state{fd=FD, chunk_size=Size}=State1} ->
-            Hdrs = [{<<"Content-type">>, <<"text/plain">>}],
-            {ok, Req2} = cowboy_http_req:chunked_reply(200, Hdrs, Req1),
+            {ok, Req2} = cowboy_http_req:chunked_reply(200, [], Req1),
             send_chunked_reply(FD, Size, Req2, State1)
     catch
         throw:{code, Code, Error, Req1} ->

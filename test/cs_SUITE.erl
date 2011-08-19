@@ -98,6 +98,12 @@ init_per_testcase(ascii_one_chunk=Name, Config) ->
     {ok, RFile1} = cs_rfile:write_file(RFile0, File),
     [{reference_file, RFile1}|Config];
 
+init_per_testcase(ascii_two_chunks=Name, Config) ->
+    File = filename:join(?config(priv_dir, Config), atom_to_list(Name)),
+    RFile0 = cs_rfile:make(1024, <<"abcd">>),
+    {ok, RFile1} = cs_rfile:write_file(RFile0, File),
+    [{reference_file, RFile1}|Config];
+
 init_per_testcase(_Name, Config) ->
     Config.
 
@@ -154,8 +160,12 @@ ascii_one_chunk(Config) ->
     ?line(ReferenceData = cs_rfile:read_file(?config(reference_file, Config))),
     ?line(ReferenceData = list_to_binary(Body)).
 
-ascii_two_chunks(_Config) ->
-    ok.
+ascii_two_chunks(Config) ->
+    ?line(URL = build_url("/ascii_two_chunks", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 200, "OK"} = Status),
+    ?line(ReferenceData = cs_rfile:read_file(?config(reference_file, Config))),
+    ?line(ReferenceData = list_to_binary(Body)).
 
 static_dir(Which, Config) when Which =:= data_dir; Which =:= priv_dir ->
     Dir = ?config(Which, Config),

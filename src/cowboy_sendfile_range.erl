@@ -18,9 +18,10 @@ get_range(Req) ->
 %% @end
 -spec parse_range(BinRange::binary(), ContentLength::pos_integer()) ->
           {Start::pos_integer(), End::pos_integer()}.
-parse_range(BinRange, ContentLength) ->
-    <<"bytes=", RangeSetBin/binary>> = BinRange,
-    hd([parse_range_spec(E, ContentLength) || E <- binary:split(RangeSetBin, [<<",">>])]).
+parse_range(<<"bytes=", RangeSetBin/binary>> = BinRange, ContentLength) ->
+    hd([parse_range_spec(E, ContentLength) || E <- binary:split(RangeSetBin, [<<",">>])]);
+parse_range(_Other, _ContentLength) ->
+    error.
 
 %% @private Expect and parse a byte-range-spec.
 -spec parse_range_spec(binary(), uint()) -> {Start::uint(), End::uint(), Length::uint()}.
@@ -59,7 +60,12 @@ valid_range_spec(_Start, _End, _Length, _ContentLength) ->
 binary_to_integer(<<>>) ->
     none;
 binary_to_integer(Bin) ->
-    list_to_integer(binary_to_list(Bin)).
+    Str = binary_to_list(Bin),
+    case string:to_integer(Str) of
+        {error, _Reason} -> error;
+        {Integer, ""} -> Integer;
+        {_Integer, _} -> error
+    end.
 
 %% == BNF from RFC2616 section 14.35.1 ==
 %% ranges-specifier = byte-ranges-specifier
@@ -77,13 +83,13 @@ rfc2615_examples_test_() ->
     [?_assertEqual({0, 499, 500}, P(<<"bytes=0-499">>)),
      ?_assertEqual({500, 999, 500}, P(<<"bytes=500-999">>)),
      ?_assertEqual({9500,9999, 500}, P(<<"bytes=-500">>)),
-     ?_assertEqual({9500,9999, 500}, P(<<"bytes=9500-">>))
+     ?_assertEqual({9500,9999, 500}, P(<<"bytes=9500-">>)),
+     ?_assertEqual(error, P(<<"notbytes=1-2">>)),
+     ?_assertEqual(error, P(<<"bytes=10000-">>)),
+     ?_assertEqual(error, P(<<"bytes=-">>)),
+     ?_assertEqual(error, P(<<"bytes=2-1">>)),
+     ?_assertEqual(error, P(<<"bytes=1-b">>)),
+     ?_assertEqual(error, P(<<"bytes=a-2">>))
     ].
-        %% TODO
-        %% - The first and last bytes only (bytes 0 and 9999):  bytes=0-0,-1
-        %% - Several legal but not canonical specifications of the second 500
-        %% bytes (byte offsets 500-999, inclusive):
-        %%  bytes=500-600,601-999
-        %%  bytes=500-700,601-999
 
 -endif.

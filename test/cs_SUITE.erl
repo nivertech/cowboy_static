@@ -20,24 +20,32 @@
          init_per_suite/1, end_per_suite/1,
          init_per_group/2, end_per_group/2]).
 
-%% test functions
+%% static test functions
 -export([empty_file/1,
          non_existing_file/1,
          below_static_root/1,
+         below_static_root_esc/1,
          subdir_not_listed/1,
          subdir_file_access/1]).
 
+%% content test functions
+-export([ascii_one_chunk/1]).
+
 all() ->
-    [{group, static}].
+    [{group, static}, {group, content}].
 
 groups() ->
     [{static, [], [
         empty_file,
         non_existing_file,
         below_static_root,
+        below_static_root_esc,
         subdir_not_listed,
         subdir_file_access
-    ]}].
+        ]}] ++
+    [{content, [], [
+        ascii_one_chunk
+        ]}].
 
 init_per_suite(Config) ->
     application:start(inets),
@@ -58,11 +66,20 @@ init_per_group(static, Config) ->
     cowboy:start_listener(http, 100,
         cowboy_tcp_transport, [{port, Port}],
         cowboy_http_protocol, [{dispatch, Dispatch}]),
-    [{scheme, "http"}, {port, Port}|Config].
+    [{scheme, "http"}, {port, Port}|Config];
+
+init_per_group(content, Config) ->
+    Config.
+
 
 end_per_group(static, _Config) ->
     cowboy:stop_listener(http),
+    ok;
+
+end_per_group(content, _Config) ->
     ok.
+
+%% static test functions
 
 empty_file(Config) ->
     ?line(URL = build_url("/empty_file", Config)),
@@ -80,6 +97,11 @@ below_static_root(Config) ->
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
 
+below_static_root_esc(Config) ->
+    ?line(URL = build_url("/%2e%2e%2fcs_SUITE.erl", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
+
 subdir_not_listed(Config) ->
     ?line(URL = build_url("/subdir", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
@@ -91,6 +113,12 @@ subdir_file_access(Config) ->
     ?line({"HTTP/1.1", 200, "OK"} = Status),
     %% TODO: It appears as if either cowboy_sendfile or httpc appends \n
     ?line("subfile-contents\n" = Body).
+
+
+%% content test functions
+
+ascii_one_chunk(Config) ->
+    ok.
 
 static_dir(Config) ->
     Datadir = ?config(data_dir, Config),

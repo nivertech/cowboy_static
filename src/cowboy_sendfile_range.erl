@@ -34,17 +34,24 @@ parse_range_spec(ElemBin, ContentLength) ->
         {none, Length} when is_integer(Length) ->
             Start = ContentLength - Length,
             End = ContentLength - 1,
-            {Start, End, Length};
+            valid_range_spec(Start, End, Length, ContentLength);
         %% "N-" (From byte N to end of content)
         {Start, none} when is_integer(Start) ->
             End = ContentLength - 1,
             Length = (End - Start) + 1,
-            {Start, End, Length};
+            valid_range_spec(Start, End, Length, ContentLength);
         %% "N-M" (From byte N to byte M)
         {Start, End} when is_integer(Start), is_integer(End) ->
             Length = (End - Start) + 1,
-            {Start, End, Length}
+            valid_range_spec(Start, End, Length, ContentLength);
+        _Other ->
+            error
     end.
+
+-spec valid_range_spec(uint(), uint(), uint(), uint()) ->
+          {uint(), uint(), uint()}.
+valid_range_spec(Start, End, Length, _Content) ->
+    {Start, End, Length}.
 
 -spec binary_to_integer(binary()) -> non_neg_integer().
 binary_to_integer(<<>>) ->

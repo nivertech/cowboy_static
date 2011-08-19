@@ -104,7 +104,7 @@ init_per_testcase(_Name, Config) ->
 end_per_testcase(ascii_one_chunk, _Config) ->
     ok;
 
-end_per_testcase(_Name, Config) ->
+end_per_testcase(_Name, _Config) ->
     ok.
 
 
@@ -118,22 +118,22 @@ empty_file(Config) ->
 
 non_existing_file(Config) ->
     ?line(URL = build_url("/non_existing", Config)),
-    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 404, "Not Found"} = Status).
 
 below_static_root(Config) ->
     ?line(URL = build_url("/../cs_SUITE.erl", Config)),
-    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
 
 below_static_root_esc(Config) ->
     ?line(URL = build_url("/%2e%2e%2fcs_SUITE.erl", Config)),
-    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
 
 subdir_not_listed(Config) ->
     ?line(URL = build_url("/subdir", Config)),
-    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
 
 subdir_file_access(Config) ->

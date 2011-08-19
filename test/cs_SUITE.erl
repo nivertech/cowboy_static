@@ -18,7 +18,8 @@
 %% common test functions
 -export([all/0, groups/0,
          init_per_suite/1, end_per_suite/1,
-         init_per_group/2, end_per_group/2]).
+         init_per_group/2, end_per_group/2,
+         init_per_testcase/2, end_per_testcase/2]).
 
 %% static test functions
 -export([empty_file/1,
@@ -59,7 +60,7 @@ end_per_suite(_Config) ->
 
 init_per_group(static, Config) ->
     Port = 33081,
-    Dir = static_dir(Config),
+    Dir  = static_dir(data_dir, Config),
     Dispatch = [{
         [<<"localhost">>], [
             {['...'], cowboy_sendfile, [{dir, Dir}]}]}],
@@ -69,7 +70,16 @@ init_per_group(static, Config) ->
     [{scheme, "http"}, {port, Port}|Config];
 
 init_per_group(content, Config) ->
-    Config.
+    Port = 33081,
+    Dir  = static_dir(priv_dir, Config),
+    Dispatch = [{
+        [<<"localhost">>], [
+            {['...'], cowboy_sendfile,
+                [{dir, Dir}, {chunk_size, 512}]}]}],
+    cowboy:start_listener(http, 100,
+        cowboy_tcp_transport, [{port, Port}],
+        cowboy_http_protocol, [{dispatch, Dispatch}]),
+    [{scheme, "http"}, {port, Port}|Config].
 
 
 end_per_group(static, _Config) ->
@@ -78,6 +88,25 @@ end_per_group(static, _Config) ->
 
 end_per_group(content, _Config) ->
     ok.
+
+%% content test function fixtures
+init_per_testcase(ascii_one_chunk=Name, Config) ->
+    Priv = ?config(priv_dir, Config),
+    File = filename:join(Priv, atom_to_list(Name)),
+    Data = lists:flatten(["abcd" || _ <- lists:seq(1, 512 div 4)]),
+    ok = file:write_file(File, Data),
+    [{reference_data, Data}|Config];
+
+init_per_testcase(_Name, Config) ->
+    Config.
+
+
+end_per_testcase(ascii_one_chunk, _Config) ->
+    ok;
+
+end_per_testcase(_Name, Config) ->
+    ok.
+
 
 %% static test functions
 
@@ -118,11 +147,15 @@ subdir_file_access(Config) ->
 %% content test functions
 
 ascii_one_chunk(Config) ->
-    ok.
+    ?line(URL = build_url("/ascii_one_chunk", Config)),
+    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
+    ?line({"HTTP/1.1", 200, "OK"} = Status),
+    ?line(ReferenceData = ?config(reference_data, Config)),
+    ?line(ReferenceData = Body).
 
-static_dir(Config) ->
-    Datadir = ?config(data_dir, Config),
-    [list_to_binary(I) || I <- filename:split(Datadir)].
+static_dir(Which, Config) when Which =:= data_dir; Which =:= priv_dir ->
+    Dir = ?config(Which, Config),
+    [list_to_binary(I) || I <- filename:split(Dir)].
 
 build_url(Path, Config) ->
     {scheme, Scheme} = lists:keyfind(scheme, 1, Config),

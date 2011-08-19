@@ -52,7 +52,7 @@ parse_range_spec(ElemBin, ContentLength) ->
 %% @private Contstuct a valid byte-range. Return error on invalid input.
 -spec valid_range_spec(uint(), uint(), uint()) -> {uint(), uint()}.
 valid_range_spec(Start, End, ContentLength)
-when Start >= 0, Start < End, End < ContentLength ->
+when 0 =< Start, Start =< End, End < ContentLength ->
     {Start, End};
 valid_range_spec(_Start, _End, _ContentLength) ->
     error.
@@ -110,6 +110,9 @@ rfc2615_examples_test_() ->
      ?_assertEqual([{500, 999, 500}], P(<<"bytes=500-999">>)),
      ?_assertEqual([{9500,9999, 500}], P(<<"bytes=-500">>)),
      ?_assertEqual([{9500,9999, 500}], P(<<"bytes=9500-">>)),
+     ?_assertEqual([{0, 0, 1}], P(<<"bytes=0-0">>)),
+     ?_assertEqual([{9999,9999,1}], P(<<"bytes=-1">>)),
+     ?_assertEqual([{0, 0, 1}, {9999, 9999, 1}], P(<<"bytes=0-0,-1">>)),
      ?_assertEqual(error, P(<<"notbytes=1-2">>)),
      ?_assertEqual(error, P(<<"bytes=10000-">>)),
      ?_assertEqual(error, P(<<"bytes=-">>)),

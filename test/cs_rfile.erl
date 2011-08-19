@@ -12,12 +12,14 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
--module(cs_ascii).
+-module(cs_rfile).
 -export([make/2,
          read/2,
-         write_file/2]).
+         write_file/2,
+         read_file/1,
+         delete/1]).
 
--record(rfile, {size, chars, rstate}).
+-record(rfile, {size, chars, rstate, real}).
 
 %% @doc Create a new file generator.
 %% The file generator will output 'Size' random characters from 'Chars'
@@ -43,10 +45,12 @@ read_(N, Chars, RState, Acc) ->
 
 
 %% @doc Write the contents of a file generator to a file.
--spec write_file(#rfile{}, string()) -> ok.
+%% A new file generator including the path of the file is returned.
+-spec write_file(#rfile{}, string()) -> {ok, #rfile{}}.
 write_file(RFile, File) ->
     {ok, FD} = file:open(File, [write,append,exclusive]),
-    write_file_(RFile, FD).
+    ok = write_file_(RFile, FD),
+    {ok, RFile#rfile{real=File}}.
 
 write_file_(RFile, FD) ->
     case read(4096, RFile) of
@@ -57,6 +61,18 @@ write_file_(RFile, FD) ->
             write_file_(NewRFile, FD)
     end.
 
+
+%% @doc Read all data from a file generator.
+-spec read_file(#rfile{}) -> binary().
+read_file(#rfile{size=Size}=RFile) ->
+    {Data, _} = read(Size, RFile),
+    Data.
+
+
+%% @doc Delete the on-disk contents of a file generator.
+%% This assumes that the generator has been returned from write_file.
+delete(#rfile{real=File}) ->
+    file:delete(File).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -84,15 +100,17 @@ write_file_test_() ->
             ok = file:make_dir(Dir)
         end,
         _Teardown=fun(_) ->
-            ok = file:delete(File),
+            file:delete(File),
             ok = file:del_dir(Dir)
         end,
         ?_test(begin
-            RFile = make(9999, <<"abcd1234">>),
-            ok = ?MODULE:write_file(RFile, File),
+            RFile0 = make(9999, <<"abcd1234">>),
+            {ok, RFile1} = ?MODULE:write_file(RFile0, File),
             {ok, FData} = file:read_file(File),
-            {RData, _} = read(9999, RFile),
-            ?assertEqual(RData, FData)
+            RData = read_file(RFile1),
+            ?assertEqual(RData, FData),
+            ok = cs_rfile:delete(RFile1),
+            ?assertEqual({error, enoent}, file:read_file(File))
         end)}.
 
 -endif.

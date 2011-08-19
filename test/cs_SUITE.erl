@@ -30,7 +30,8 @@
          subdir_file_access/1]).
 
 %% content test functions
--export([ascii_one_chunk/1]).
+-export([ascii_one_chunk/1,
+         ascii_two_chunks/1]).
 
 all() ->
     [{group, static}, {group, content}].
@@ -45,7 +46,8 @@ groups() ->
         subdir_file_access
         ]}] ++
     [{content, [], [
-        ascii_one_chunk
+        ascii_one_chunk,
+        ascii_two_chunks
         ]}].
 
 init_per_suite(Config) ->
@@ -91,18 +93,17 @@ end_per_group(content, _Config) ->
 
 %% content test function fixtures
 init_per_testcase(ascii_one_chunk=Name, Config) ->
-    Priv = ?config(priv_dir, Config),
-    File = filename:join(Priv, atom_to_list(Name)),
-    Data = lists:flatten(["abcd" || _ <- lists:seq(1, 512 div 4)]),
-    ok = file:write_file(File, Data),
-    [{reference_data, Data}|Config];
+    File = filename:join(?config(priv_dir, Config), atom_to_list(Name)),
+    RFile0 = cs_rfile:make(512, <<"abcd">>),
+    {ok, RFile1} = cs_rfile:write_file(RFile0, File),
+    [{reference_file, RFile1}|Config];
 
 init_per_testcase(_Name, Config) ->
     Config.
 
 
-end_per_testcase(ascii_one_chunk, _Config) ->
-    ok;
+end_per_testcase(ascii_one_chunk, Config) ->
+    ok = cs_rfile:delete(?config(reference_file, Config));
 
 end_per_testcase(_Name, _Config) ->
     ok.
@@ -150,8 +151,11 @@ ascii_one_chunk(Config) ->
     ?line(URL = build_url("/ascii_one_chunk", Config)),
     ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
     ?line({"HTTP/1.1", 200, "OK"} = Status),
-    ?line(ReferenceData = ?config(reference_data, Config)),
-    ?line(ReferenceData = Body).
+    ?line(ReferenceData = cs_rfile:read_file(?config(reference_file, Config))),
+    ?line(ReferenceData = list_to_binary(Body)).
+
+ascii_two_chunks(_Config) ->
+    ok.
 
 static_dir(Which, Config) when Which =:= data_dir; Which =:= priv_dir ->
     Dir = ?config(Which, Config),

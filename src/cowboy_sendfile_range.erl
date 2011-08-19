@@ -96,13 +96,6 @@ binary_to_integer(Bin) ->
         {_Integer, _} -> error
     end.
 
-%% == BNF from RFC2616 section 14.35.1 ==
-%% ranges-specifier = byte-ranges-specifier
-%% byte-ranges-specifier = bytes-unit "=" byte-range-set
-%% byte-range-set  = 1#( byte-range-spec | suffix-byte-range-spec )
-%% byte-range-spec = first-byte-pos "-" [last-byte-pos]
-%% first-byte-pos  = 1*DIGIT
-%% last-byte-pos   = 1*DIGIT
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

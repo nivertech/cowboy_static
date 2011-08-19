@@ -25,31 +25,31 @@ parse_range(BinRange, ContentLength) ->
 %% @private Expect and parse a byte-range-spec.
 -spec parse_range_spec(binary(), uint()) -> {Start::uint(), End::uint(), Length::uint()}.
 parse_range_spec(ElemBin, ContentLength) ->
-    case binary:split(ElemBin, [<<"-">>]) of
-        [<<>>, <<>>] ->
-            {error, norange};
+    Range = case binary:split(ElemBin, [<<"-">>]) of
+        [IStart, IEnd] -> {binary_to_integer(IStart), binary_to_integer(IEnd)};
+        _ -> error
+    end,
+    case Range of
         %% "-N" (Last N bytes of content)
-        [<<>>, LengthBin] ->
-            Length = binary_to_integer(LengthBin),
+        {none, Length} when is_integer(Length) ->
             Start = ContentLength - Length,
             End = ContentLength - 1,
             {Start, End, Length};
         %% "N-" (From byte N to end of content)
-        [StartBin, <<>>] ->
-            Start = binary_to_integer(StartBin),
+        {Start, none} when is_integer(Start) ->
             End = ContentLength - 1,
             Length = (End - Start) + 1,
             {Start, End, Length};
         %% "N-M" (From byte N to byte M)
-        [StartBin, EndBin] ->
-            Start = binary_to_integer(StartBin),
-            End = binary_to_integer(EndBin),
+        {Start, End} when is_integer(Start), is_integer(End) ->
             Length = (End - Start) + 1,
             {Start, End, Length}
     end.
 
 -spec binary_to_integer(binary()) -> non_neg_integer().
-binary_to_integer(Bin) when is_binary(Bin) ->
+binary_to_integer(<<>>) ->
+    none;
+binary_to_integer(Bin) ->
     list_to_integer(binary_to_list(Bin)).
 
 %% == BNF from RFC2616 section 14.35.1 ==

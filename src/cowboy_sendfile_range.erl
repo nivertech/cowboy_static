@@ -72,7 +72,10 @@ join_ranges([{IStart, IEnd}|IT], [{OStart, OEnd}|OT]=Output) ->
         IStart >= OStart, IStart =< OEnd, IEnd =< OEnd ->
             join_ranges(IT, Output);
         %% IStart in output range and IEnd beyond output range.
-        IStart >= OStart, IStart =< OEnd, IEnd =< OEnd ->
+        IStart >= OStart, IStart =< OEnd ->
+            join_ranges(IT, [{OStart, IEnd}|OT]);
+        %% IStart adjacent to end of output range and IEnd beyond output range.
+        (IStart - 1) =:= OEnd ->
             join_ranges(IT, [{OStart, IEnd}|OT]);
         %% IStart and IEnd beyond output range.
         IStart > OEnd ->
@@ -113,6 +116,8 @@ rfc2615_examples_test_() ->
      ?_assertEqual([{0, 0, 1}], P(<<"bytes=0-0">>)),
      ?_assertEqual([{9999,9999,1}], P(<<"bytes=-1">>)),
      ?_assertEqual([{0, 0, 1}, {9999, 9999, 1}], P(<<"bytes=0-0,-1">>)),
+     ?_assertEqual([{500, 999, 500}], P(<<"bytes=500-600,601-999">>)),
+     ?_assertEqual([{500, 999, 500}], P(<<"bytes=500-700,601-999">>)),
      ?_assertEqual(error, P(<<"notbytes=1-2">>)),
      ?_assertEqual(error, P(<<"bytes=10000-">>)),
      ?_assertEqual(error, P(<<"bytes=-">>)),

@@ -177,12 +177,16 @@ subdir_file_access(Config) ->
 ascii_one_chunk(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
         make_get("/ascii_one_chunk", [], Config)),
-    ?line(Body = cs_rfile:read_file(?config(reference_file, Config))).
+    ?line(Body = cs_rfile:read_file(?config(reference_file, Config))),
+    ?line({ok, {{200, "OK"}, _, <<"">>}} =
+        make_head("/ascii_one_chunk", [], Config)).
 
 ascii_two_chunks(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
         make_get("/ascii_two_chunks", [], Config)),
-    ?line(Body = cs_rfile:read_file(?config(reference_file, Config))).
+    ?line(Body = cs_rfile:read_file(?config(reference_file, Config))),
+    ?line({ok, {{200, "OK"}, _, <<"">>}} =
+        make_head("/ascii_two_chunks", [], Config)).
 
 ascii_hd_range(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, Body}} =

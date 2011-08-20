@@ -122,7 +122,7 @@ validate_resource_access(Req0, Conf, #state{finfo=FInfo}=State) ->
 
 range_header_exists(Req0, Conf, #state{finfo=FInfo}=State) when Conf#conf.ranges ->
     #file_info{size=ContentLength} = FInfo,
-    case cowboy_http_req:header(<<"Range">>, Req0) of
+    case cowboy_http_req:header('Range', Req0) of
         {undefined, Req1} ->
             open_file_handle(Req1, Conf, State#state{ranges=none});
         {RangesBin, Req1} ->
@@ -153,9 +153,16 @@ open_file_handle(Req0, Conf, #state{path=Path}=State) ->
     end.
 
 
-init_send_reply(Req0, Conf, State) when not is_list(State#state.ranges) ->
+init_send_reply(Req, Conf, State) when not is_list(State#state.ranges) ->
+    init_send_chunked_response(Req, Conf, State);
+init_send_reply(Req, Conf, State) ->
+    init_send_chunked_response(Req, Conf, State).
+
+
+init_send_chunked_response(Req0, Conf, State) ->
     {ok, Req1} = cowboy_http_req:chunked_reply(200, [], Req0),
     send_chunked_response_body(Req1, Conf, State).
+
 
 send_chunked_response_body(Req, Conf, State) ->
     #conf{csize=ChSize} = Conf,

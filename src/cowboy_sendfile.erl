@@ -161,7 +161,12 @@ init_send_reply(Req, Conf, State) ->
 
 init_send_chunked_response(Req0, Conf, State) ->
     {ok, Req1} = cowboy_http_req:chunked_reply(200, [], Req0),
-    send_chunked_response_body(Req1, Conf, State).
+    case State#state.method of
+        'GET' ->
+            send_chunked_response_body(Req1, Conf, State);
+        'HEAD' ->
+            {ok, Req1, Conf}
+    end.
 
 
 send_chunked_response_body(Req, Conf, State) ->

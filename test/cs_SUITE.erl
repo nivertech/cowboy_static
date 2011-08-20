@@ -137,29 +137,40 @@ end_test_file(_Name, Config) ->
 %% static test functions
 
 empty_file(Config) ->
-    ?line({ok, {{200, "OK"}, _Hdrs, <<"">>}} =
-        make_get("/empty_file", [], Config)).
+    ?line({ok, {{200, "OK"}, _, <<"">>}} =
+        make_get("/empty_file", [], Config)),
+    ?line({ok, {{200, "OK"}, _, <<"">>}} =
+        make_head("/empty_file", [], Config)).
 
 non_existing_file(Config) ->
     ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
-        make_get("/non_existing", [], Config)).
+        make_get("/non_existing", [], Config)),
+    ?line({ok, {{404, "Not Found"}, _, <<"">>}} =
+        make_head("/non_existing", [], Config)).
 
 below_static_root(Config) ->
     ?line({ok, {{403, "Forbidden"}, _Hdrs, _Body}} =
-        make_get("/../cs_SUITE.erl", [], Config)).
+        make_get("/../cs_SUITE.erl", [], Config)),
+    ?line({ok, {{403, "Forbidden"}, _, <<"">>}} =
+        make_head("/../cs_SUITE.erl", [], Config)).
 
 below_static_root_esc(Config) ->
     ?line({ok, {{403, "Forbidden"}, _Hdrs, _Body}} =
-        make_get("/%2e%2e%2fcs_SUITE.erl", [], Config)).
+        make_get("/%2e%2e%2fcs_SUITE.erl", [], Config)),
+    ?line({ok, {{403, "Forbidden"}, _, <<"">>}} =
+        make_head("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
 subdir_not_listed(Config) ->
     ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
-        make_get("/subdir", [], Config)).
+        make_get("/subdir", [], Config)),
+    ?line({ok, {{404, "Not Found"}, _Hdrs, <<"">>}}=
+        make_head("/subdir", [], Config)).
 
 subdir_file_access(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, <<"subfile-contents\n">>}} =
-        make_get("/subdir/subfile", [], Config)).
-
+        make_get("/subdir/subfile", [], Config)),
+    ?line({ok, {{200, "OK"}, _, <<"">>}} =
+        make_head("/subdir/subfile", [], Config)).
 
 %% content test functions
 
@@ -192,3 +203,7 @@ build_url(Path, Config) ->
 make_get(Path, Headers, Config) ->
     URL = build_url(Path, Config),
     lhttpc:request(URL, 'GET', Headers, infinity).
+
+make_head(Path, Headers, Config) ->
+    URL = build_url(Path, Config),
+    lhttpc:request(URL, 'HEAD', Headers, infinity).

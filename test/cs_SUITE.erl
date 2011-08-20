@@ -53,7 +53,6 @@ groups() ->
         ]}].
 
 init_per_suite(Config) ->
-    ok = application:start(inets),
     ok = application:start(crypto),
     ok = application:start(public_key),
     ok = application:start(ssl),
@@ -67,7 +66,6 @@ end_per_suite(_Config) ->
     ok = application:stop(ssl),
     ok = application:stop(public_key),
     ok = application:stop(crypto),
-    ok = application:stop(inets),
     ok.
 
 init_per_group(static, Config) ->
@@ -139,50 +137,41 @@ end_test_file(_Name, Config) ->
 %% static test functions
 
 empty_file(Config) ->
-    ?line(URL = build_url("/empty_file", Config)),
-    ?line({ok, {Status, _Hdrs, Body}} = httpc:request(URL)),
-    ?line({"HTTP/1.1", 200, "OK"} = Status),
-    ?line("" = Body).
+    ?line({ok, {{200, "OK"}, _Hdrs, <<"">>}} =
+        make_get("/empty_file", [], Config)).
 
 non_existing_file(Config) ->
-    ?line(URL = build_url("/non_existing", Config)),
-    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
-    ?line({"HTTP/1.1", 404, "Not Found"} = Status).
+    ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
+        make_get("/non_existing", [], Config)).
 
 below_static_root(Config) ->
-    ?line(URL = build_url("/../cs_SUITE.erl", Config)),
-    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
-    ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
+    ?line({ok, {{403, "Forbidden"}, _Hdrs, _Body}} =
+        make_get("/../cs_SUITE.erl", [], Config)).
 
 below_static_root_esc(Config) ->
-    ?line(URL = build_url("/%2e%2e%2fcs_SUITE.erl", Config)),
-    ?line({ok, {Status, _Hdrs, _Body}} = httpc:request(URL)),
-    ?line({"HTTP/1.1", 403, "Forbidden"} = Status).
+    ?line({ok, {{403, "Forbidden"}, _Hdrs, _Body}} =
+        make_get("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
 subdir_not_listed(Config) ->
-    ?line(URL = build_url("/subdir", Config)),
-    ?line({ok, {{"HTTP/1.1", 404, "Not Found"}, _Hdrs, _Body}} = httpc:request(URL)).
+    ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
+        make_get("/subdir", [], Config)).
 
 subdir_file_access(Config) ->
-    ?line(URL = build_url("/subdir/subfile", Config)),
-    ?line({ok, {{"HTTP/1.1", 200, "OK"}, _Hdrs, Body}} = httpc:request(URL)),
-    %% TODO: It appears as if either cowboy_sendfile or httpc appends \n
-    ?line("subfile-contents\n" = Body).
+    ?line({ok, {{200, "OK"}, _Hdrs, <<"subfile-contents\n">>}} =
+        make_get("/subdir/subfile", [], Config)).
 
 
 %% content test functions
 
 ascii_one_chunk(Config) ->
-    ?line(URL = build_url("/ascii_one_chunk", Config)),
-    ?line({ok, {{"HTTP/1.1", 200, "OK"}, _Hdrs, Body}} = httpc:request(URL)),
-    ?line(ReferenceData = cs_rfile:read_file(?config(reference_file, Config))),
-    ?line(ReferenceData = list_to_binary(Body)).
+    ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
+        make_get("/ascii_one_chunk", [], Config)),
+    ?line(Body = cs_rfile:read_file(?config(reference_file, Config))).
 
 ascii_two_chunks(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
         make_get("/ascii_two_chunks", [], Config)),
-    ?line(ReferenceData = cs_rfile:read_file(?config(reference_file, Config))),
-    ?line(ReferenceData = Body).
+    ?line(Body = cs_rfile:read_file(?config(reference_file, Config))).
 
 ascii_hd_range(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
@@ -201,5 +190,5 @@ build_url(Path, Config) ->
     Scheme ++ "://localhost:" ++ integer_to_list(Port) ++ Path.
 
 make_get(Path, Headers, Config) ->
-    ?line(URL = build_url(Path, Config)),
+    URL = build_url(Path, Config),
     lhttpc:request(URL, 'GET', Headers, infinity).

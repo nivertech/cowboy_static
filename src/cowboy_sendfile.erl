@@ -15,14 +15,29 @@
 -module(cowboy_sendfile).
 -behaviour(cowboy_http_handler).
 
+%% include files
+-include_lib("kernel/include/file.hrl").
+
 %% cowboy callbacks
 -export([init/3, handle/2, terminate/2]).
 
--record(state, {
-    dir :: [binary()],
+%% type aliases
+-type uint() :: non_neg_integer().
+
+%% handler config
+-record(conf, {
+    dir    :: [binary()],
     prefix :: [binary()],
-    chunk_size :: pos_integer(),
-    fd  :: term()}).
+    csize  :: pos_integer(),
+    ranges :: boolean()}).
+
+%% handler state
+-record(state, {
+    method :: 'GET' | 'HEAD',
+    path   :: [binary()],
+    finfo  :: #file_info{},
+    ranges :: [{uint(), uint(), uint()}],
+    fd     :: term()}).
 
 init({tcp, http}, Req, Opts) ->
     {_, Dir} = lists:keyfind(dir, 1, Opts),
@@ -34,44 +49,130 @@ init({tcp, http}, Req, Opts) ->
         {_, IPrefix} -> IPrefix;
         false -> []
     end,
-    {ok, Req, #state{dir=Dir, chunk_size=Size, prefix=Prefix}}.
-
-handle(Req0, State0) ->
-    try handle_request(Req0, State0) of
-        {ok, Req1, #state{fd=FD, chunk_size=Size}=State1} ->
-            {ok, Req2} = cowboy_http_req:chunked_reply(200, [], Req1),
-            send_chunked_reply(FD, Size, Req2, State1)
-    catch
-        throw:{code, Code, Error, Req1} ->
-            {ok, Req2} = cowboy_http_req:reply(Code, [], Error, Req1),
-            {ok, Req2, State0}
-    end.
-
-%% @private Handle a request for static files.
-handle_request(Req0, #state{dir=Dir, prefix=Prefix}=State) ->
-    {Path0, Req1} = cowboy_http_req:path(Req0),
-    Path1 = strip_prefix(Prefix, Path0),
-    AbsPath = abs_path(Dir, Path1),
-    AbsPath =/= invalid orelse throw({code, 403, <<"Permission denied">>, Req1}),
-    case lists:prefix(Dir, AbsPath) of
-        true -> ok;
-        false -> throw({code, 403, <<"Permission denied">>, Req1})
+    Ranges = case lists:keyfind(ranges, 1, Opts) of
+        {_, IRanges} -> IRanges;
+        false -> true
     end,
-    case file:open(filename:join(AbsPath), [read, binary, raw]) of
-        {ok, FD} ->
-            {ok, Req1, State#state{fd=FD}};
-        {error, eacces} ->
-            throw({code, 403, <<"Permission denied">>, Req1});
-        {error, eisdir} ->
-            throw({code, 403, <<"Permission denied">>, Req1});
-        {error, enoent} ->
-            throw({code, 404, <<"File not found">>, Req1});
-        {error, Reason} ->
-            throw({code, 500, ["Error opening file: ", Reason], Req1})
+    {ok, Req, #conf{dir=Dir, csize=Size, prefix=Prefix, ranges=Ranges}}.
+
+handle(Req, Conf) ->
+    method_allowed(Req, Conf, #state{}).
+
+terminate(_Req, _Conf) ->
+    ok.
+
+method_allowed(Req0, Conf, State) ->
+    case cowboy_http_req:method(Req0) of
+        {'GET', Req1} ->
+            validate_path(Req1, Conf, State#state{method='GET'});
+        {'HEAD', Req1} ->
+            validate_path(Req1, Conf, State#state{method='HEAD'});
+        {_, Req1} ->
+            {ok, Req2} = cowboy_http_req:reply(405, [], <<>>, Req1),
+            {ok, Req2, Conf}
     end.
 
-terminate(_Req, _State) ->
-    ok.
+validate_path(Req0, #conf{dir=Dir}=Conf, State) ->
+    {Path0, Req1} = cowboy_http_req:path(Req0),
+    case abs_path(Dir, Path0) of
+        invalid ->
+            {ok, Req2} = cowboy_http_reply:reply(403, [], <<>>, Req1),
+            {ok, Req2, Conf};
+        Path1 ->
+            validate_path_allowed(Req1, Conf, State#state{path=Path1})
+    end.
+
+validate_path_allowed(Req0, #conf{dir=Dir}=Conf, #state{path=Path}=State) ->
+    case lists:prefix(Dir, Path) of
+        false ->
+            {ok, Req1} = cowboy_http_req:reply(403, [], <<>>, Req0),
+            {ok, Req1, Conf};
+        true ->
+            resource_exists(Req0, Conf, State#state{path=filename:join(Path)})
+    end.
+
+resource_exists(Req0, Conf, #state{path=Path}=State) ->
+    case file:read_file_info(Path) of
+        {ok, #file_info{}=FInfo} ->
+            validate_resource_type(Req0, Conf, State#state{finfo=FInfo});
+        {error, enoent} ->
+            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req0),
+            {ok, Req1, Conf}
+    end.
+
+validate_resource_type(Req0, Conf, #state{finfo=FInfo}=State) ->
+    case FInfo of
+        #file_info{type=regular} ->
+            validate_resource_access(Req0, Conf, State);
+        _Other ->
+            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req0),
+            {ok, Req1, Conf}
+    end.
+
+validate_resource_access(Req0, Conf, #state{finfo=FInfo}=State) ->
+    case FInfo of
+        #file_info{access=read} ->
+            range_header_exists(Req0, Conf, State);
+        #file_info{access=read_write} ->
+            range_header_exists(Req0, Conf, State);
+        _Other ->
+            {ok, Req1} = cowboy_http_req:reply(403, [], <<>>, Req0),
+            {ok, Req1, Conf}
+    end.
+
+range_header_exists(Req0, Conf, #state{finfo=FInfo}=State) when Conf#conf.ranges ->
+    #file_info{size=ContentLength} = FInfo,
+    case cowboy_http_req:header(<<"Range">>, Req0) of
+        {undefined, Req1} ->
+            open_file_handle(Req1, Conf, State#state{ranges=none});
+        {RangesBin, Req1} ->
+            Ranges = cowboy_sendfile_range:parse_range(RangesBin, ContentLength),
+            open_file_handle(Req1, Conf, State#state{ranges=Ranges})
+    end;
+range_header_exists(Req, Conf, State) ->
+    open_file_handle(Req, Conf, State#state{ranges=none}).
+
+
+open_file_handle(Req0, Conf, #state{path=Path}=State) ->
+    case file:open(Path, [read,binary,raw]) of
+        {ok, FD} ->
+            init_send_reply(Req0, Conf, State#state{fd=FD});
+        {error, eacces} ->
+            {ok, Req1} = cowboy_http_req:reply(403, [], <<>>, Req0),
+            {ok, Req1, Conf};
+        {error, eisdir} ->
+            {ok, Req1} = cowboy_http_req:reply(403, [], <<>>, Req0),
+            {ok, Req1, Conf};
+        {error, enoent} ->
+            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req0),
+            {ok, Req1, Conf};
+        {error, Reason} ->
+            Error = io_lib:format("Error opening file: ~p~n", [Reason]),
+            {ok, Req1} = cowboy_http_req:reply(500, [], Error, Req0),
+            {ok, Req1, Conf}
+    end.
+
+
+init_send_reply(Req0, Conf, State) when not is_list(State#state.ranges) ->
+    {ok, Req1} = cowboy_http_req:chunked_reply(200, [], Req0),
+    send_chunked_response_body(Req1, Conf, State).
+
+send_chunked_response_body(Req, Conf, State) ->
+    #conf{csize=ChSize} = Conf,
+    #state{finfo=FInfo, fd=FD} = State,
+    #file_info{size=CoLength} = FInfo,
+    send_chunked_response_body(Req, Conf, State, FD, ChSize, CoLength).
+
+send_chunked_response_body(Req, Conf, _State, FD, _ChSize, 0) ->
+    file:close(FD),
+    {ok, Req, Conf};
+send_chunked_response_body(Req, Conf, State, FD, ChSize, N) ->
+    NBytes = if N < ChSize -> N; true -> ChSize end,
+    case file:read(FD, NBytes) of
+        {ok, Data} when byte_size(Data) =:= NBytes ->
+            ok = cowboy_http_req:chunk(Data, Req),
+            send_chunked_response_body(Req, Conf, State, FD, ChSize, N-NBytes)
+    end.
 
 
 %% @private Return an absolute file path based on the static file root.
@@ -92,25 +193,6 @@ abs_path_([H|T], Stack) ->
     abs_path_(T, [H|Stack]);
 abs_path_([], Stack) ->
     lists:reverse(Stack).
-
-
-%% @private Strip a prefix from a path.
--spec strip_prefix(Prefix::[binary()], Path::[binary()]) -> [binary()].
-strip_prefix([], Path) ->
-    Path;
-strip_prefix([H|Pref], [H|Path]) ->
-    strip_prefix(Pref, Path).
-
-%% @private Send the contents of a file to a client.
-send_chunked_reply(FD, Size, Req, State) ->
-    case file:read(FD, Size) of
-        eof ->
-            ok = file:close(FD),
-            {ok, Req, State#state{fd=undefined}};
-        {ok, Data} ->
-            ok = cowboy_http_req:chunk(Data, Req),
-            send_chunked_reply(FD, Size, Req, State)
-    end.
 
 
 -ifdef(TEST).

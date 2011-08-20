@@ -161,7 +161,7 @@ below_static_root_esc(Config) ->
 
 subdir_not_listed(Config) ->
     ?line(URL = build_url("/subdir", Config)),
-    ?line({ok, {{"HTTP/1.1", 403, "Forbidden"}, _Hdrs, _Body}} = httpc:request(URL)).
+    ?line({ok, {{"HTTP/1.1", 404, "Not Found"}, _Hdrs, _Body}} = httpc:request(URL)).
 
 subdir_file_access(Config) ->
     ?line(URL = build_url("/subdir/subfile", Config)),

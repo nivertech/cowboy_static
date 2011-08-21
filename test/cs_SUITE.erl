@@ -189,7 +189,7 @@ ascii_two_chunks(Config) ->
         make_head("/ascii_two_chunks", [], Config)).
 
 ascii_hd_range(Config) ->
-    ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
+    ?line({ok, {{206, "Partial Content"}, _Hdrs, Body}} =
         make_get("/ascii_hd_range", [{"Range", "bytes=0-499"}], Config)),
     ?line(500 = byte_size(Body)).
 

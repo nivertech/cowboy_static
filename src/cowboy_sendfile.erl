@@ -153,8 +153,11 @@ open_file_handle(Req0, Conf, #state{path=Path}=State) ->
     end.
 
 
-init_send_reply(Req, Conf, State) when not is_list(State#state.ranges) ->
-    init_send_chunked_response(Req, Conf, State);
+init_send_reply(Req, Conf, #state{ranges=[_]}=State) ->
+    init_send_partial_response(Req, Conf, State);
+init_send_reply(Req, Conf, #state{ranges=[_|_]}=State) ->
+    %% init_send_multipart_response(Req, Conf, State);
+    exit(multipart_response_not_implemented);
 init_send_reply(Req, Conf, State) ->
     init_send_chunked_response(Req, Conf, State).
 
@@ -185,6 +188,22 @@ send_chunked_response_body(Req, Conf, State, FD, ChSize, N) ->
             ok = cowboy_http_req:chunk(Data, Req),
             send_chunked_response_body(Req, Conf, State, FD, ChSize, N-NBytes)
     end.
+
+
+init_send_partial_response(Req0, Conf, State) ->
+    #state{ranges=[{Start, End, Length}], finfo=FInfo, fd=FD} = State,
+    #file_info{size=ContentLength} = FInfo,
+    #conf{csize=ChunkSize} = Conf,
+    StartStr   = integer_to_list(Start),
+    EndStr     = integer_to_list(End),
+    LengthStr  = integer_to_list(Length),
+    ContLenStr = integer_to_list(ContentLength),
+    Headers = [
+        {<<"Content-Range">>,
+            iolist_to_binary([<<"bytes ">>, StartStr, $-, EndStr, $/, ContLenStr])}],
+    {ok, Req1} = cowboy_http_req:chunked_reply(206, Headers, Req0),
+    {ok, Start} = file:position(FD, {bof, Start}),
+    send_chunked_response_body(Req1, Conf, State, FD, ChunkSize, Length).
 
 
 %% @private Return an absolute file path based on the static file root.

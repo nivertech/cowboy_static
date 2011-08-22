@@ -17,6 +17,7 @@
 
 %% include files
 -include_lib("kernel/include/file.hrl").
+-include_lib("cowboy/include/http.hrl").
 
 %% cowboy callbacks
 -export([init/3, handle/2, terminate/2]).

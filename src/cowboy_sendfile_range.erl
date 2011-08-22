@@ -14,7 +14,9 @@
 
 -module(cowboy_sendfile_range).
 -export([get_range/1,
-         parse_range/2]).
+         parse_range/2,
+         make_range/3,
+         make_range/2]).
 
 -type uint() :: non_neg_integer().
 
@@ -72,6 +74,7 @@ valid_range_spec(_Start, _End, _ContentLength) ->
     error.
 
 %% @private Join a set of byte-ranges.
+%% TODO - Stop reading y*ws, it will give you bad ideas.
 -spec join_ranges([{uint(), uint()}]) -> [{uint(), uint(), uint()}].
 join_ranges(Ranges) ->
     case lists:sort(Ranges) of
@@ -96,6 +99,32 @@ join_ranges([{IStart, IEnd}|IT], [{OStart, OEnd}|OT]=Output) ->
             ORange = {OStart, OEnd, (OEnd - OStart) + 1},
             join_ranges(IT, [{IStart, IEnd},ORange|OT])
     end.
+
+%% @doc Make a Content-Range header with a known Content-Length.
+%% The content range header is included in 206 (Partial Content) responses
+%% and indicates which byte range is sent in the response. The content range
+%% header also includes the content length of the resource to aid clients
+%% making subsequent requests.
+%% @end
+-spec make_range(uint(), uint(), uint()) -> {binary(), binary()}.
+make_range(Start, End, ContentLength) ->
+    SStr = integer_to_list(Start),
+    EStr = integer_to_list(End),
+    LStr = integer_to_list(ContentLength),
+    HVal = iolist_to_binary([SStr, $-, EStr, $/, LStr]),
+    {<<"Content-Range">>, HVal}.
+
+
+%% @doc Make a Content-Range header with an unknown Content-Length.
+%% This is equivalent to make_range/2. The total content range is replaced
+%% with an asterix (*) to indicate that the total content is unknown.
+%% @end
+-spec make_range(uint(), uint()) -> {binary(), binary()}.
+make_range(Start, End) ->
+    SStr = integer_to_list(Start),
+    EStr = integer_to_list(End),
+    HVal = iolist_to_binary([SStr, $-, EStr, $/, $*]),
+    {<<"Content-Range">>, HVal}.
 
 
 %% @private Convert a binary to an integr. Return error on invalid input.
@@ -131,6 +160,13 @@ rfc2615_examples_test_() ->
      ?_assertEqual(error, P(<<"bytes=2-1">>)),
      ?_assertEqual(error, P(<<"bytes=1-b">>)),
      ?_assertEqual(error, P(<<"bytes=a-2">>))
+    ].
+
+range_header_test_() ->
+    Name = <<"Content-Range">>,
+    [?_assertEqual({Name, <<"0-0/2">>}, make_range(0, 0, 2)),
+     ?_assertEqual({Name, <<"1-3/4">>}, make_range(1, 3, 4)),
+     ?_assertEqual({Name, <<"0-4/*">>}, make_range(0, 4))
     ].
 
 -endif.

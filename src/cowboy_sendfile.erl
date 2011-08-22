@@ -195,17 +195,27 @@ init_send_partial_response(Req0, Conf, State) ->
     #state{ranges=[{Start, End, Length}], finfo=FInfo, fd=FD} = State,
     #file_info{size=ContentLength} = FInfo,
     #conf{csize=ChunkSize} = Conf,
-    StartStr   = integer_to_list(Start),
-    EndStr     = integer_to_list(End),
     LengthStr  = integer_to_list(Length),
     ContLenStr = integer_to_list(ContentLength),
     Headers = [
-        {<<"Content-Range">>,
-            iolist_to_binary([<<"bytes ">>, StartStr, $-, EndStr, $/, ContLenStr])}],
-    {ok, Req1} = cowboy_http_req:chunked_reply(206, Headers, Req0),
+        {<<"Content-Length">>, list_to_binary(integer_to_list(Length))},
+        cowboy_sendfile_range:make_range(Start, End, ContentLength)],
+    {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
     {ok, Start} = file:position(FD, {bof, Start}),
-    send_chunked_response_body(Req1, Conf, State, FD, ChunkSize, Length).
+    #http_req{socket=Socket, transport=Transport} = Req1,
+    send_file_contents(Req1, Conf, State, Transport, Socket, FD, ChunkSize, Length).
 
+
+send_file_contents(Req, Conf, State, Transport, Socket, FD, ChunkSize, 0) ->
+    file:close(FD),
+    {ok, Req, Conf};
+send_file_contents(Req1, Conf, State, Transport, Socket, FD, ChunkSize, N) ->
+    NBytes = if N < ChunkSize -> N; true -> ChunkSize end,
+    case file:read(FD, NBytes) of
+        {ok, Data} when byte_size(Data) =:= NBytes ->
+            ok = Transport:send(Socket, Data),
+            send_file_contents(Req1, Conf, State, Transport, Socket, FD, ChunkSize, N-NBytes)
+    end.
 
 %% @private Return an absolute file path based on the static file root.
 -spec abs_path(Dir::[binary()], Path::[binary()]) -> [binary()].

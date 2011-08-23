@@ -3,12 +3,25 @@
 -mode(compile).
 
 main(_) ->
+    ok = noise("Starting application: sendfile~n", []),
     ok = application:start(sendfile),
+    ok = noise("Starting application: cowboy~n", []),
     ok = application:start(cowboy),
-    {ok, CwdStr} = file:get_cwd(),
-    Cwd = [list_to_binary(I) || I <- filename:split(CwdStr)],
-    io:format("Starting server...~n", []),
+    Cwd = get_cwd(),
+    ok = noise("Using current working directory ~s~n", [filename:join(Cwd)]),
+    ok = noise("Using port ~.10B~n", [8181]),
     {ok, Pid} = cowboy_sendfile_example:start(Cwd, 8181),
-    io:format("Started server...~n", []),
+    ok = noise("Server running at http://localhost:~.10B/~n", [8181]),
     MRef = erlang:monitor(process, Pid),
     receive {'DOWN', MRef, process, _, _} -> ok end.
+
+get_cwd() ->
+    %% TODO - do this automatically on init of a dispatch entry
+    {ok, Cwd} = file:get_cwd(),
+    [list_to_binary(I) || I <- filename:split(Cwd)].
+
+noise(Fmt, Arg) ->
+    {{Ye,Mo,Da},{Ho,Mi,Se}} = erlang:localtime(),
+    TimestampFmt = "[~.10B-~.10B-~.10B ~.10B:~.10B:~.10B]",
+    TimestampArg = [Ye,Mo,Da,Ho,Mi,Se],
+    io:format(TimestampFmt ++ " " ++ Fmt, TimestampArg ++ Arg).

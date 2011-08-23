@@ -145,6 +145,12 @@ range_header_exists(Req, Conf, State) ->
     open_file_handle(Req, Conf, State#state{ranges=none}).
 
 
+
+%% The sendfile module expects to be sent a filename and handles opening the
+%% file itself. When using the regular file module we really want to aquire
+%% the file handle as soon as possible in order to bail out early.
+open_file_handle(Req, Conf, State) when Conf#conf.usesfile ->
+    init_send_reply(Req, Conf, State);
 open_file_handle(Req0, Conf, #state{path=Path}=State) ->
     case file:open(Path, [read,binary,raw]) of
         {ok, FD} ->
@@ -168,17 +174,24 @@ open_file_handle(Req0, Conf, #state{path=Path}=State) ->
 init_send_reply(Req, Conf, #state{ranges=[_]}=State) ->
     init_send_partial_response(Req, Conf, State);
 init_send_reply(Req, Conf, #state{ranges=[_|_]}=State) ->
-    %% init_send_multipart_response(Req, Conf, State);
     exit(multipart_response_not_implemented);
 init_send_reply(Req, Conf, State) ->
-    init_send_chunked_response(Req, Conf, State).
+    init_send_complete_response(Req, Conf, State).
 
 
-init_send_chunked_response(Req0, Conf, State) ->
-    {ok, Req1} = cowboy_http_req:chunked_reply(200, [], Req0),
+init_send_complete_response(Req0, Conf, State) when Conf#conf.usesfile ->
+    #state{finfo=FInfo, path=Path} = State,
+    #file_info{size=ContentLength} = FInfo,
+    BinContentLength = list_to_binary(integer_to_list(ContentLength)),
+    Headers = [
+        {<<"Content-Length">>, BinContentLength}],
+    {ok, Req1} = cowboy_http_req:reply(200, Headers, <<>>, Req0),
     case State#state.method of
         'GET' ->
-            send_chunked_response_body(Req1, Conf, State);
+            %% TODO - refactor init_send_file_contents
+            #http_req{socket=Socket} = Req1,
+            {ok, ContentLength} = sendfile:send(Socket, Path, 0, ContentLength),
+            {ok, Req1, Conf};
         'HEAD' ->
             {ok, Req1, Conf}
     end.
@@ -203,18 +216,28 @@ send_chunked_response_body(Req, Conf, State, FD, ChSize, N) ->
 
 
 init_send_partial_response(Req0, Conf, State) ->
-    #state{ranges=[{Start, End, Length}], finfo=FInfo, fd=FD} = State,
+    #state{ranges=[{Start, End, Length}], finfo=FInfo} = State,
     #file_info{size=ContentLength} = FInfo,
-    #conf{csize=ChunkSize} = Conf,
     LengthStr  = integer_to_list(Length),
     ContLenStr = integer_to_list(ContentLength),
     Headers = [
         {<<"Content-Length">>, list_to_binary(integer_to_list(Length))},
         cowboy_sendfile_range:make_range(Start, End, ContentLength)],
     {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
+    init_send_file_contents(Req1, Conf, State).
+
+
+init_send_file_contents(Req, Conf, State) when Conf#conf.usesfile ->
+    #http_req{socket=Socket} = Req,
+    #state{ranges=[{Start, _, Length}], path=Path} = State,
+    {ok, Length} = sendfile:send(Socket, Path, Start, Length),
+    {ok, Req, Conf};
+init_send_file_contents(Req, Conf, State) ->
+    #http_req{socket=Socket, transport=Transport} = Req,
+    #state{ranges=[{Start, _, Length}], fd=FD} = State,
+    #conf{csize=ChunkSize} = Conf,
     {ok, Start} = file:position(FD, {bof, Start}),
-    #http_req{socket=Socket, transport=Transport} = Req1,
-    send_file_contents(Req1, Conf, State, Transport, Socket, FD, ChunkSize, Length).
+    send_file_contents(Req, Conf, State, Transport, Socket, FD, ChunkSize, Length).
 
 
 send_file_contents(Req, Conf, State, Transport, Socket, FD, ChunkSize, 0) ->

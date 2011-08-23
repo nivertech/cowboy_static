@@ -57,11 +57,13 @@ init_per_suite(Config) ->
     ok = application:start(public_key),
     ok = application:start(ssl),
     ok = application:start(lhttpc),
+    ok = application:start(sendfile),
     ok = application:start(cowboy),
     Config.
 
 end_per_suite(_Config) ->
     ok = application:stop(cowboy),
+    ok = application:stop(sendfile),
     ok = application:stop(lhttpc),
     ok = application:stop(ssl),
     ok = application:stop(public_key),

@@ -1,6 +1,7 @@
 language: erlang
 notifications:
   email: true
+script: "make check"
 env:
   - R14B03
   - R14A

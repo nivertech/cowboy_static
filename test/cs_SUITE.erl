@@ -121,7 +121,7 @@ when Name =:= subdir_not_listed; Name =:= subdir_file_access ->
     Subdir = filename:join([?config(priv_dir, Config), "subdir"]),
     File = filename:join([Subdir, "subfile"]),
     ok = file:make_dir(Subdir),
-    {ok,_} = file:write_file(File, "subdir-contents\n"),
+    ok = file:write_file(File, "subfile-contents\n"),
     [{ref_subdir, Subdir},{ref_file,File}|Config];
 
 init_per_testcase(ascii_one_chunk=Name, Config) ->
@@ -136,6 +136,9 @@ init_per_testcase(ascii_hd_range=Name, Config) ->
 init_per_testcase(_Name, Config) ->
     Config.
 
+
+end_per_testcase(empty_file, Config) ->
+    end_test_file(empty_file, Config);
 
 end_per_testcase(Name, Config)
 when Name =:= subdir_not_listed; Name =:= subdir_file_access ->
@@ -179,15 +182,18 @@ non_existing_file(Config) ->
         make_head("/non_existing", [], Config)).
 
 below_static_root(Config) ->
-    ?line({ok, {{403, "Forbidden"}, _Hdrs, _Body}} =
-        make_get("/../cs_SUITE.erl", [], Config)),
-    ?line({ok, {{403, "Forbidden"}, _, <<"">>}} =
-        make_head("/../cs_SUITE.erl", [], Config)).
+    %% TODO - ensure that there is a file that _could_ be served.
+    %% when serving from the data_dir we knew that ../?MODULE existed.
+    ?line({ok, {{403, _}, _Hdrs, _Body}} =
+        make_get("/../example", [], Config)),
+    ?line({ok, {{403, _}, _, <<"">>}} =
+        make_head("/../example", [], Config)).
 
 below_static_root_esc(Config) ->
-    ?line({ok, {{403, "Forbidden"}, _Hdrs, _Body}} =
+    %% TODO - ensure that there is a file that _could_ be served
+    ?line({ok, {{403, _}, _Hdrs, _Body}} =
         make_get("/%2e%2e%2fcs_SUITE.erl", [], Config)),
-    ?line({ok, {{403, "Forbidden"}, _, <<"">>}} =
+    ?line({ok, {{403, _}, _, <<"">>}} =
         make_head("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
 subdir_not_listed(Config) ->

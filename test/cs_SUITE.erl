@@ -111,7 +111,10 @@ end_per_group(Name, Config) ->
     cowboy:stop_listener(http),
     ok.
 
-%% content test function fixtures
+%% test function fixtures
+
+init_per_testcase(empty_file=Name, Config) ->
+    init_test_file(Name, cs_rfile:make(0, <<>>), Config);
 
 init_per_testcase(ascii_one_chunk=Name, Config) ->
     init_test_file(Name, cs_rfile:make(512, <<"abcd">>), Config);

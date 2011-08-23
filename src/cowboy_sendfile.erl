@@ -179,21 +179,22 @@ init_send_reply(Req, Conf, State) ->
     init_send_complete_response(Req, Conf, State).
 
 
-init_send_complete_response(Req0, Conf, State) when Conf#conf.usesfile ->
+init_send_complete_response(Req0, Conf, State) ->
     #state{finfo=FInfo, path=Path} = State,
     #file_info{size=ContentLength} = FInfo,
     BinContentLength = list_to_binary(integer_to_list(ContentLength)),
     Headers = [
         {<<"Content-Length">>, BinContentLength}],
     {ok, Req1} = cowboy_http_req:reply(200, Headers, <<>>, Req0),
+    %% The response to a HEAD Request is expected to be the same as a GET
+    %% except for the lack of a Response body. Stop right before sending
+    %% the response body and use the same code for everything else.
     case State#state.method of
-        'GET' ->
-            %% TODO - refactor init_send_file_contents
-            #http_req{socket=Socket} = Req1,
-            {ok, ContentLength} = sendfile:send(Socket, Path, 0, ContentLength),
-            {ok, Req1, Conf};
         'HEAD' ->
-            {ok, Req1, Conf}
+            {ok, Req1, Conf};
+        'GET' ->
+            #http_req{socket=Socket} = Req1,
+            init_send_file_contents(Req1, Conf, State, 0, ContentLength)
     end.
 
 
@@ -224,17 +225,18 @@ init_send_partial_response(Req0, Conf, State) ->
         {<<"Content-Length">>, list_to_binary(integer_to_list(Length))},
         cowboy_sendfile_range:make_range(Start, End, ContentLength)],
     {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
-    init_send_file_contents(Req1, Conf, State).
+    init_send_file_contents(Req1, Conf, State, Start, Length).
 
-
-init_send_file_contents(Req, Conf, State) when Conf#conf.usesfile ->
+%% Stream the contents of a file to a socket. This assumes that the response
+%% headers has been sent and the Content-Length header was set to 'Length'.
+init_send_file_contents(Req, Conf, State, Start, Length) when Conf#conf.usesfile ->
     #http_req{socket=Socket} = Req,
-    #state{ranges=[{Start, _, Length}], path=Path} = State,
+    #state{path=Path} = State,
     {ok, Length} = sendfile:send(Socket, Path, Start, Length),
     {ok, Req, Conf};
-init_send_file_contents(Req, Conf, State) ->
+init_send_file_contents(Req, Conf, State, Start, Length) ->
     #http_req{socket=Socket, transport=Transport} = Req,
-    #state{ranges=[{Start, _, Length}], fd=FD} = State,
+    #state{fd=FD} = State,
     #conf{csize=ChunkSize} = Conf,
     {ok, Start} = file:position(FD, {bof, Start}),
     send_file_contents(Req, Conf, State, Transport, Socket, FD, ChunkSize, Length).

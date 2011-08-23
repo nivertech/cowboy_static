@@ -2,26 +2,46 @@
 %%! -pa ebin -pa deps/cowboy/ebin -pa deps/sendfile/ebin -pa deps/quoted/ebin
 -mode(compile).
 
-main(_) ->
+-record(opts, {port, dir}).
+
+main(Args) ->
     ok = noise("Starting application: sendfile~n", []),
     ok = application:start(sendfile),
     ok = noise("Starting application: cowboy~n", []),
     ok = application:start(cowboy),
-    Cwd = get_cwd(),
-    ok = noise("Using current working directory ~s~n", [filename:join(Cwd)]),
-    ok = noise("Using port ~.10B~n", [8181]),
-    {ok, Pid} = cowboy_sendfile_example:start(Cwd, 8181),
-    ok = noise("Server running at http://localhost:~.10B/~n", [8181]),
+    Opts = get_opts(Args),
+    #opts{port=Port, dir=Dir} = Opts,
+    ok = noise("Using current working directory ~s~n", [filename:join(Dir)]),
+    ok = noise("Using port ~.10B~n", [Port]),
+    {ok, Pid} = cowboy_sendfile_example:start(Dir, Port),
+    ok = noise("Server running at http://localhost:~.10B/~n", [Port]),
     MRef = erlang:monitor(process, Pid),
     receive {'DOWN', MRef, process, _, _} -> ok end.
 
-get_cwd() ->
-    %% TODO - do this automatically on init of a dispatch entry
+
+get_opts(Args) ->
     {ok, Cwd} = file:get_cwd(),
-    [list_to_binary(I) || I <- filename:split(Cwd)].
+    OptSpecList = [
+        {port, $p, "port", {integer, 8181}, "HTTP server port"},
+        {dir,  $d, "dir",  {string, Cwd},   "Static file directory"}],
+    case getopt:parse(OptSpecList, Args) of
+        {ok, {Opts, _}} ->
+            {_, Port} = lists:keyfind(port, 1, Opts),
+            {_, Dir} = lists:keyfind(dir, 1, Opts),
+            #opts{port=Port, dir=make_dir(Dir)};
+        _ ->
+            getopt:usage(OptSpecList, "serve"),
+            init:stop(1),
+            %% Wait an arbitrary time until we eventually get shutdown
+            timer:sleep(5000)
+    end.
 
 noise(Fmt, Arg) ->
     {{Ye,Mo,Da},{Ho,Mi,Se}} = erlang:localtime(),
     TimestampFmt = "[~.10B-~.10B-~.10B ~.10B:~.10B:~.10B]",
     TimestampArg = [Ye,Mo,Da,Ho,Mi,Se],
     io:format(TimestampFmt ++ " " ++ Fmt, TimestampArg ++ Arg).
+
+%% TODO - do this automatically on init of a dispatch entry
+make_dir(Str) ->
+    [list_to_binary(I) || I <- filename:split(Str)].

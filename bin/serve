@@ -1,0 +1,14 @@
+#!/usr/bin/env escript
+%%! -pa ebin -pa deps/cowboy/ebin -pa deps/sendfile/ebin -pa deps/quoted/ebin
+-mode(compile).
+
+main(_) ->
+    ok = application:start(sendfile),
+    ok = application:start(cowboy),
+    {ok, CwdStr} = file:get_cwd(),
+    Cwd = [list_to_binary(I) || I <- filename:split(CwdStr)],
+    io:format("Starting server...~n", []),
+    {ok, Pid} = cowboy_sendfile_example:start(Cwd, 8181),
+    io:format("Started server...~n", []),
+    MRef = erlang:monitor(process, Pid),
+    receive {'DOWN', MRef, process, _, _} -> ok end.

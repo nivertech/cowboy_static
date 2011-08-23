@@ -27,10 +27,11 @@
 
 %% handler config
 -record(conf, {
-    dir    :: [binary()],
-    prefix :: [binary()],
-    csize  :: pos_integer(),
-    ranges :: boolean()}).
+    dir      :: [binary()],
+    prefix   :: [binary()],
+    csize    :: pos_integer(),
+    ranges   :: boolean(),
+    usesfile :: boolean()}).
 
 %% handler state
 -record(state, {
@@ -54,7 +55,17 @@ init({tcp, http}, Req, Opts) ->
         {_, IRanges} -> IRanges;
         false -> true
     end,
-    {ok, Req, #conf{dir=Dir, csize=Size, prefix=Prefix, ranges=Ranges}}.
+    Sendfile = case lists:keyfind(sendfile, 1, Opts) of
+        {_, ISendfile} -> ISendfile;
+        false -> true
+    end,
+    Conf = #conf{
+        dir=Dir,
+        csize=Size,
+        prefix=Prefix,
+        ranges=Ranges,
+        usesfile=Sendfile},
+    {ok, Req, Conf}.
 
 handle(Req, Conf) ->
     method_allowed(Req, Conf, #state{}).

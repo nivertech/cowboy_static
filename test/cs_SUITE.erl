@@ -116,6 +116,14 @@ end_per_group(Name, Config) ->
 init_per_testcase(empty_file=Name, Config) ->
     init_test_file(Name, cs_rfile:make(0, <<>>), Config);
 
+init_per_testcase(Name, Config)
+when Name =:= subdir_not_listed; Name =:= subdir_file_access ->
+    Subdir = filename:join([?config(priv_dir, Config), "subdir"]),
+    File = filename:join([Subdir, "subfile"]),
+    ok = file:make_dir(Subdir),
+    {ok,_} = file:write_file(File, "subdir-contents\n"),
+    [{ref_subdir, Subdir},{ref_file,File}|Config];
+
 init_per_testcase(ascii_one_chunk=Name, Config) ->
     init_test_file(Name, cs_rfile:make(512, <<"abcd">>), Config);
 
@@ -128,6 +136,13 @@ init_per_testcase(ascii_hd_range=Name, Config) ->
 init_per_testcase(_Name, Config) ->
     Config.
 
+
+end_per_testcase(Name, Config)
+when Name =:= subdir_not_listed; Name =:= subdir_file_access ->
+    Subdir = ?config(ref_subdir, Config),
+    File = ?config(ref_file, Config),
+    ok = file:delete(File),
+    ok = file:del_dir(Subdir);
 
 end_per_testcase(ascii_one_chunk, Config) ->
     end_test_file(ascii_one_chunk, Config);

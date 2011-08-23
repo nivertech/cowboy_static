@@ -35,70 +35,80 @@
          ascii_hd_range/1]).
 
 all() ->
-    [{group, static}, {group, content}].
+    [{group, file},
+     {group, sendfile}].
 
 groups() ->
-    [{static, [], [
+    AllCases = [
         empty_file,
         non_existing_file,
         below_static_root,
         below_static_root_esc,
         subdir_not_listed,
-        subdir_file_access
-        ]}] ++
-    [{content, [], [
+        subdir_file_access,
         ascii_one_chunk,
         ascii_two_chunks,
-        ascii_hd_range
-        ]}].
+        ascii_hd_range],
+    %% We want to run all test cases against both the regular file-module
+    %% implementation and the sendfile-module implementation to root out
+    %% any inconsistencies between them. This ensures that static file serving
+    %% works on platforms without sendfile support.
+    [{file,
+        [], AllCases},
+     {sendfile,
+        [], AllCases}].
+
+use_sendfile(file) ->
+    false;
+use_sendfile(sendfile) ->
+    true.
+
+%% per suite fixtures
 
 init_per_suite(Config) ->
     ok = application:start(crypto),
     ok = application:start(public_key),
     ok = application:start(ssl),
     ok = application:start(lhttpc),
-    ok = application:start(sendfile),
     ok = application:start(cowboy),
     Config.
 
+
 end_per_suite(_Config) ->
     ok = application:stop(cowboy),
-    ok = application:stop(sendfile),
     ok = application:stop(lhttpc),
     ok = application:stop(ssl),
     ok = application:stop(public_key),
     ok = application:stop(crypto),
     ok.
 
-init_per_group(static, Config) ->
-    Port = 33081,
-    Dir  = static_dir(data_dir, Config),
-    Dispatch = [{
-        [<<"localhost">>], [
-            {['...'], cowboy_sendfile, [{dir, Dir}]}]}],
-    cowboy:start_listener(http, 100,
-        cowboy_tcp_transport, [{port, Port}],
-        cowboy_http_protocol, [{dispatch, Dispatch}]),
-    [{scheme, "http"}, {port, Port}|Config];
+%% per group fixtures
 
-init_per_group(content, Config) ->
+init_per_group(Name, Config) ->
+    case use_sendfile(Name) of
+        true  -> ok = application:start(sendfile);
+        false -> ok
+    end,
+
     Port = 33081,
     Dir  = static_dir(priv_dir, Config),
-    Dispatch = [{
-        [<<"localhost">>], [
-            {['...'], cowboy_sendfile,
-                [{dir, Dir}, {chunk_size, 512}]}]}],
+    StaticOpts = [
+        {dir, Dir},
+        {sendfile, ?config(use_sendfile, Config)},
+        {chunk_size, 512}],
+    Dispatch = [{[<<"localhost">>], [{['...'], cowboy_sendfile, StaticOpts}]}],
     cowboy:start_listener(http, 100,
         cowboy_tcp_transport, [{port, Port}],
         cowboy_http_protocol, [{dispatch, Dispatch}]),
-    [{scheme, "http"}, {port, Port}|Config].
+    [{scheme, "http"},{port, Port}|Config].
 
 
-end_per_group(static, _Config) ->
+end_per_group(Name, Config) ->
+    case use_sendfile(Name) of
+        true  -> ok = application:stop(sendfile);
+        false -> ok
+    end,
     cowboy:stop_listener(http),
-    ok;
-
-end_per_group(content, _Config) ->
     ok.
 
 %% content test function fixtures

@@ -2,6 +2,11 @@
 %%! -pa ebin -pa deps/cowboy/ebin -pa deps/sendfile/ebin -pa deps/quoted/ebin
 -mode(compile).
 
+%% This escript implements a basic stand alone HTTP server running only the
+%% cowboy_sendfile handler. It is useful for testing the cowboy_sendfile
+%% handler using tools and clients other than the lhttpc client used by
+%% the Common Test suites.
+
 -record(opts, {port, dir}).
 
 main(Args) ->

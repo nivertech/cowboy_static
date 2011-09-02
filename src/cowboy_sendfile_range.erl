@@ -37,7 +37,13 @@ get_range(Req) ->
 parse_range(<<"bytes=", RangeSetBin/binary>>, ContentLength) ->
     RangeSetBins = binary:split(RangeSetBin, [<<",">>]),
     RangeSet = [parse_range_spec(E, ContentLength) || E <- RangeSetBins],
-    join_ranges(RangeSet);
+    %% @todo If an invalid range occurs in the Range header all ranges
+    %% that are valid should be included in the response instead. Ensure
+    %% that this is handled elsewhere and return the RangeSet as is.
+    case lists:member(error, RangeSet) of
+        true  -> error;
+        false -> RangeSet
+    end;
 parse_range(_Other, _ContentLength) ->
     error.
 
@@ -69,36 +75,9 @@ parse_range_spec(ElemBin, ContentLength) ->
 -spec valid_range_spec(uint(), uint(), uint()) -> {uint(), uint()}.
 valid_range_spec(Start, End, ContentLength)
 when 0 =< Start, Start =< End, End < ContentLength ->
-    {Start, End};
+    {Start, End, (End-Start)+1};
 valid_range_spec(_Start, _End, _ContentLength) ->
     error.
-
-%% @private Join a set of byte-ranges.
-%% TODO - Stop reading y*ws, it will give you bad ideas.
--spec join_ranges([{uint(), uint()}]) -> [{uint(), uint(), uint()}].
-join_ranges(Ranges) ->
-    case lists:sort(Ranges) of
-        [error|_] -> error;
-        [First|Sorted] -> join_ranges(Sorted, [First])
-    end.
-
-join_ranges([], [{OStart, OEnd}|OT]) ->
-    lists:reverse([{OStart, OEnd, (OEnd - OStart) + 1}|OT]);
-join_ranges([{IStart, IEnd}|IT], [{OStart, OEnd}|OT]=Output) ->
-    if  %% IStart and IEnd in output range
-        IStart >= OStart, IStart =< OEnd, IEnd =< OEnd ->
-            join_ranges(IT, Output);
-        %% IStart in output range and IEnd beyond output range.
-        IStart >= OStart, IStart =< OEnd ->
-            join_ranges(IT, [{OStart, IEnd}|OT]);
-        %% IStart adjacent to end of output range and IEnd beyond output range.
-        (IStart - 1) =:= OEnd ->
-            join_ranges(IT, [{OStart, IEnd}|OT]);
-        %% IStart and IEnd beyond output range.
-        IStart > OEnd ->
-            ORange = {OStart, OEnd, (OEnd - OStart) + 1},
-            join_ranges(IT, [{IStart, IEnd},ORange|OT])
-    end.
 
 %% @doc Make a Content-Range header with a known Content-Length.
 %% The content range header is included in 206 (Partial Content) responses
@@ -152,8 +131,10 @@ rfc2615_examples_test_() ->
      ?_assertEqual([{0, 0, 1}], P(<<"bytes=0-0">>)),
      ?_assertEqual([{9999,9999,1}], P(<<"bytes=-1">>)),
      ?_assertEqual([{0, 0, 1}, {9999, 9999, 1}], P(<<"bytes=0-0,-1">>)),
-     ?_assertEqual([{500, 999, 500}], P(<<"bytes=500-600,601-999">>)),
-     ?_assertEqual([{500, 999, 500}], P(<<"bytes=500-700,601-999">>)),
+     ?_assertEqual(
+        [{500, 600,101},{601,999,399}], P(<<"bytes=500-600,601-999">>)),
+     ?_assertEqual(
+        [{500,700,201},{601,999,399}], P(<<"bytes=500-700,601-999">>)),
      ?_assertEqual(error, P(<<"notbytes=1-2">>)),
      ?_assertEqual(error, P(<<"bytes=10000-">>)),
      ?_assertEqual(error, P(<<"bytes=-">>)),

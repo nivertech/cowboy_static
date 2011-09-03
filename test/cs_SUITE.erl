@@ -26,17 +26,20 @@
          non_existing_file/1,
          below_static_root/1,
          below_static_root_esc/1,
+         directory_redirect/1,
          subdir_not_listed/1,
          subdir_file_access/1]).
 
 %% content test functions
 -export([ascii_one_chunk/1,
          ascii_two_chunks/1,
-         ascii_hd_range/1]).
+         ascii_hd_range/1,
+         multipart_halves/1]).
 
 all() ->
     [{group, file},
-     {group, sendfile}].
+     {group, sendfile},
+     {group, lighttpd}].
 
 groups() ->
     AllCases = [
@@ -44,11 +47,13 @@ groups() ->
         non_existing_file,
         below_static_root,
         below_static_root_esc,
+        directory_redirect,
         subdir_not_listed,
         subdir_file_access,
         ascii_one_chunk,
         ascii_two_chunks,
-        ascii_hd_range],
+        ascii_hd_range,
+        multipart_halves],
     %% We want to run all test cases against both the regular file-module
     %% implementation and the sendfile-module implementation to root out
     %% any inconsistencies between them. This ensures that static file serving
@@ -56,6 +61,8 @@ groups() ->
     [{file,
         [], AllCases},
      {sendfile,
+        [], AllCases},
+     {lighttpd,
         [], AllCases}].
 
 use_sendfile(file) ->
@@ -84,6 +91,10 @@ end_per_suite(_Config) ->
 
 %% per group fixtures
 
+init_per_group(lighttpd, Config) ->
+    NewConfig = [{scheme, "http"},{port,33081}|Config],
+    cs_lighttpd:init_server(NewConfig);
+
 init_per_group(Name, Config) ->
     case use_sendfile(Name) of
         true  -> ok = application:start(sendfile);
@@ -94,7 +105,7 @@ init_per_group(Name, Config) ->
     Dir  = static_dir(priv_dir, Config),
     StaticOpts = [
         {dir, Dir},
-        {sendfile, ?config(use_sendfile, Config)},
+        {sendfile, use_sendfile(Name)},
         {chunk_size, 512}],
     Dispatch = [{[<<"localhost">>], [{['...'], cowboy_sendfile, StaticOpts}]}],
     cowboy:start_listener(http, 100,
@@ -102,6 +113,9 @@ init_per_group(Name, Config) ->
         cowboy_http_protocol, [{dispatch, Dispatch}]),
     [{scheme, "http"},{port, Port}|Config].
 
+
+end_per_group(lighttpd, Config) ->
+    cs_lighttpd:end_server(Config);
 
 end_per_group(Name, Config) ->
     case use_sendfile(Name) of
@@ -117,7 +131,8 @@ init_per_testcase(empty_file=Name, Config) ->
     init_test_file(Name, cs_rfile:make(0, <<>>), Config);
 
 init_per_testcase(Name, Config)
-when Name =:= subdir_not_listed; Name =:= subdir_file_access ->
+when Name =:= subdir_not_listed; Name =:= subdir_file_access
+   ; Name =:= directory_redirect ->
     Subdir = filename:join([?config(priv_dir, Config), "subdir"]),
     File = filename:join([Subdir, "subfile"]),
     ok = file:make_dir(Subdir),
@@ -133,6 +148,9 @@ init_per_testcase(ascii_two_chunks=Name, Config) ->
 init_per_testcase(ascii_hd_range=Name, Config) ->
     init_test_file(Name, cs_rfile:make(1024, <<"efg">>), Config);
 
+init_per_testcase(multipart_halves=Name, Config) ->
+    init_test_file(Name, cs_rfile:make(2048, <<"abc">>), Config);
+
 init_per_testcase(_Name, Config) ->
     Config.
 
@@ -141,7 +159,8 @@ end_per_testcase(empty_file, Config) ->
     end_test_file(empty_file, Config);
 
 end_per_testcase(Name, Config)
-when Name =:= subdir_not_listed; Name =:= subdir_file_access ->
+when Name =:= subdir_not_listed; Name =:= subdir_file_access
+   ; Name =:= directory_redirect ->
     Subdir = ?config(ref_subdir, Config),
     File = ?config(ref_file, Config),
     ok = file:delete(File),
@@ -155,6 +174,9 @@ end_per_testcase(ascii_two_chunks, Config) ->
 
 end_per_testcase(ascii_hd_range, Config) ->
     end_test_file(ascii_hd_range, Config);
+
+end_per_testcase(multipart_halves, Config) ->
+    end_test_file(multipart_halves, Config);
 
 end_per_testcase(_Name, _Config) ->
     ok.
@@ -196,9 +218,15 @@ below_static_root_esc(Config) ->
     ?line({ok, {{403, _}, _, <<"">>}} =
         make_head("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
+directory_redirect(Config) ->
+    ?line({ok, {{301, "Moved Permanently"}, _Hdrs, _Body}} =
+        make_get("/subdir", [], Config)),
+    ?line({ok, {{301, "Moved Permanently"}, _Hdrs, _Body}} =
+        make_head("/subdir", [], Config)).
+
 subdir_not_listed(Config) ->
     ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
-        make_get("/subdir", [], Config)),
+        make_get("/subdir/", [], Config)),
     ?line({ok, {{404, "Not Found"}, _Hdrs, <<"">>}}=
         make_head("/subdir", [], Config)).
 
@@ -228,6 +256,11 @@ ascii_hd_range(Config) ->
     ?line({ok, {{206, "Partial Content"}, _Hdrs, Body}} =
         make_get("/ascii_hd_range", [{"Range", "bytes=0-499"}], Config)),
     ?line(500 = byte_size(Body)).
+
+multipart_halves(Config) ->
+    ?line({ok, {{206, "Partial Content"}, _Hdrs, Body}} =
+        make_get("/multipart_halves", [
+            {"Range", "bytes=0-1023,1024-2047"}], Config)).
 
 %% util functions
 

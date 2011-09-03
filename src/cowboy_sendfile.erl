@@ -174,7 +174,10 @@ open_file_handle(Req0, Conf, #state{path=Path}=State) ->
 init_send_reply(Req, Conf, #state{ranges=[_]}=State) ->
     init_send_partial_response(Req, Conf, State);
 init_send_reply(Req, Conf, #state{ranges=[_|_]}=State) ->
-    exit(multipart_response_not_implemented);
+    %%init_send_multipart_response(Req, Conf, State);
+    init_send_complete_response(Req, Conf, State);
+init_send_reply(Req, Conf, #state{ranges=error}=State) ->
+    init_send_complete_response(Req, Conf, State);
 init_send_reply(Req, Conf, State) ->
     init_send_complete_response(Req, Conf, State).
 

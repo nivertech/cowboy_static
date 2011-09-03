@@ -206,16 +206,16 @@ non_existing_file(Config) ->
 below_static_root(Config) ->
     %% TODO - ensure that there is a file that _could_ be served.
     %% when serving from the data_dir we knew that ../?MODULE existed.
-    ?line({ok, {{403, _}, _Hdrs, _Body}} =
+    ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
         make_get("/../example", [], Config)),
-    ?line({ok, {{403, _}, _, <<"">>}} =
+    ?line({ok, {{404, "Not Found"}, _, <<"">>}} =
         make_head("/../example", [], Config)).
 
 below_static_root_esc(Config) ->
     %% TODO - ensure that there is a file that _could_ be served
-    ?line({ok, {{403, _}, _Hdrs, _Body}} =
+    ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
         make_get("/%2e%2e%2fcs_SUITE.erl", [], Config)),
-    ?line({ok, {{403, _}, _, <<"">>}} =
+    ?line({ok, {{404, "Not Found"}, _, <<"">>}} =
         make_head("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
 directory_redirect(Config) ->

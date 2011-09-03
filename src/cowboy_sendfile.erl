@@ -88,7 +88,8 @@ validate_path(Req0, #conf{dir=Dir}=Conf, State) ->
     {Path0, Req1} = cowboy_http_req:path(Req0),
     case abs_path(Dir, Path0) of
         invalid ->
-            {ok, Req2} = cowboy_http_reply:reply(403, [], <<>>, Req1),
+            %% @todo Better response code?
+            {ok, Req2} = cowboy_http_reply:reply(404, [], <<>>, Req1),
             {ok, Req2, Conf};
         Path1 ->
             validate_path_allowed(Req1, Conf, State#state{path=Path1})
@@ -97,7 +98,7 @@ validate_path(Req0, #conf{dir=Dir}=Conf, State) ->
 validate_path_allowed(Req0, #conf{dir=Dir}=Conf, #state{path=Path}=State) ->
     case lists:prefix(Dir, Path) of
         false ->
-            {ok, Req1} = cowboy_http_req:reply(403, [], <<>>, Req0),
+            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req0),
             {ok, Req1, Conf};
         true ->
             resource_exists(Req0, Conf, State#state{path=filename:join(Path)})

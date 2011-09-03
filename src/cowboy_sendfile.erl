@@ -114,11 +114,20 @@ resource_exists(Req0, Conf, #state{path=Path}=State) ->
     end.
 
 validate_resource_type(Req0, Conf, #state{finfo=FInfo}=State) ->
+    {RawPath, Req1} = cowboy_http_req:raw_path(Req0),
+    LastChar = binary:last(RawPath),
     case FInfo of
         #file_info{type=regular} ->
-            validate_resource_access(Req0, Conf, State);
+            validate_resource_access(Req1, Conf, State);
+        #file_info{type=directory} when LastChar =:= $/ ->
+            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req1),
+            {ok, Req1, Conf};
+        #file_info{type=directory} when LastChar =/= $/ ->
+            %% @todo Location header
+            {ok, Req1} = cowboy_http_req:reply(301, [], <<>>, Req1),
+            {ok, Req1, Conf};
         _Other ->
-            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req0),
+            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req1),
             {ok, Req1, Conf}
     end.
 

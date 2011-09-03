@@ -219,16 +219,16 @@ below_static_root_esc(Config) ->
         make_head("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
 directory_redirect(Config) ->
-    ?line({ok, {{301, "Moved Permanently"}, _Hdrs, _Body}} =
+    ?line({ok, {{301, "Moved Permanently"}, _Hdrs0, _Body0}} =
         make_get("/subdir", [], Config)),
-    ?line({ok, {{301, "Moved Permanently"}, _Hdrs, _Body}} =
+    ?line({ok, {{301, "Moved Permanently"}, _Hdrs1, _Body1}} =
         make_head("/subdir", [], Config)).
 
 subdir_not_listed(Config) ->
-    ?line({ok, {{404, "Not Found"}, _Hdrs, _Body}} =
+    ?line({ok, {{404, "Not Found"}, _Hdrs0, _Body}} =
         make_get("/subdir/", [], Config)),
-    ?line({ok, {{404, "Not Found"}, _Hdrs, <<"">>}}=
-        make_head("/subdir", [], Config)).
+    ?line({ok, {{404, "Not Found"}, _Hdrs1, <<"">>}}=
+        make_head("/subdir/", [], Config)).
 
 subdir_file_access(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, <<"subfile-contents\n">>}} =

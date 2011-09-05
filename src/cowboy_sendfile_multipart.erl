@@ -41,7 +41,7 @@ partial_([{Start, End, _}=H|T], Boundary, FileSize) ->
     PreBoundary = [<<"--">>, Boundary, <<"\r\n">>],
     %% A Content-Range header defines the byte-range of this section.
     {_, RangeSpec} = cowboy_sendfile_range:make_range(Start, End, FileSize),
-    ContentRangeHdr = [<<"Content-Range: bytes ">>, RangeSpec, <<"\r\n">>],
+    ContentRangeHdr = [<<"Content-Range: ">>, RangeSpec, <<"\r\n">>],
     %% Use a default type header before MIME type support is implemented.
     ContentTypeHdr = <<"Content-Type: application/octet-stream\r\n">>,
     %% A CRLF separates the headers of each section from the content.

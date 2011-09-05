@@ -90,7 +90,7 @@ make_range(Start, End, ContentLength) ->
     SStr = integer_to_list(Start),
     EStr = integer_to_list(End),
     LStr = integer_to_list(ContentLength),
-    HVal = iolist_to_binary([SStr, $-, EStr, $/, LStr]),
+    HVal = iolist_to_binary([<<"bytes ">>, SStr, $-, EStr, $/, LStr]),
     {<<"Content-Range">>, HVal}.
 
 
@@ -102,7 +102,7 @@ make_range(Start, End, ContentLength) ->
 make_range(Start, End) ->
     SStr = integer_to_list(Start),
     EStr = integer_to_list(End),
-    HVal = iolist_to_binary([SStr, $-, EStr, $/, $*]),
+    HVal = iolist_to_binary([<<"bytes ">>, SStr, $-, EStr, $/, $*]),
     {<<"Content-Range">>, HVal}.
 
 
@@ -145,9 +145,9 @@ rfc2615_examples_test_() ->
 
 range_header_test_() ->
     Name = <<"Content-Range">>,
-    [?_assertEqual({Name, <<"0-0/2">>}, make_range(0, 0, 2)),
-     ?_assertEqual({Name, <<"1-3/4">>}, make_range(1, 3, 4)),
-     ?_assertEqual({Name, <<"0-4/*">>}, make_range(0, 4))
+    [?_assertEqual({Name, <<"bytes 0-0/2">>}, make_range(0, 0, 2)),
+     ?_assertEqual({Name, <<"bytes 1-3/4">>}, make_range(1, 3, 4)),
+     ?_assertEqual({Name, <<"bytes 0-4/*">>}, make_range(0, 4))
     ].
 
 -endif.

@@ -19,6 +19,9 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("cowboy/include/http.hrl").
 
+%% exported functions
+-export([make/1]).
+
 %% cowboy callbacks
 -export([init/3, handle/2, terminate/2]).
 
@@ -41,7 +44,16 @@
     ranges :: [{uint(), uint(), uint()}],
     fd     :: term()}).
 
-init({tcp, http}, Req, Opts) ->
+-type option()
+   :: {prefix, [binary()]}
+    | {chunk_size, pos_integer()}
+    | {ranges, boolean()}
+    | {sendfile, boolean()}.
+
+%% @doc Return a cowboy dispatch rule.
+%% @end
+-spec make([option()]) -> term().
+make(Opts) ->
     {_, Dir} = lists:keyfind(dir, 1, Opts),
     Size = case lists:keyfind(chunk_size, 1, Opts) of
         {_, ISize} -> ISize;
@@ -65,6 +77,14 @@ init({tcp, http}, Req, Opts) ->
         prefix=Prefix,
         ranges=Ranges,
         usesfile=Sendfile},
+    Pattern = Prefix ++ ['...'],
+    {Pattern, ?MODULE, Conf}.
+
+
+init({tcp, http}, Req, Conf) when is_record(Conf, conf) ->
+    {ok, Req, Conf};
+init({tcp, http}, Req, Opts) when is_list(Opts) ->
+    {_, _, Conf} = make(Opts),
     {ok, Req, Conf}.
 
 handle(Req, Conf) ->

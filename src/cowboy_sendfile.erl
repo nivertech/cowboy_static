@@ -145,12 +145,16 @@ validate_resource_type(Req0, Conf, #state{finfo=FInfo}=State) ->
             end,
             {RawHost, Req3} = cowboy_http_req:raw_host(Req2),
             {RawQS, Req4} = cowboy_http_req:raw_qs(Req3),
+            QueryString = case RawQS of
+                <<>> -> <<>>;
+                _ -> [$?|RawQS]
+            end,
             RedirectURL = iolist_to_binary([
                 Scheme,
                 RawHost,
                 PortStr,
                 RawPath, $/,
-                RawQS]),
+                QueryString]),
             Headers = [{<<"Location">>, RedirectURL}],
             {ok, Req5} = cowboy_http_req:reply(301, Headers, <<>>, Req1),
             {ok, Req5, Conf};

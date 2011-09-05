@@ -223,9 +223,18 @@ directory_redirect(Config) ->
         make_get("/subdir", [], Config)),
     ?line({ok, {{301, "Moved Permanently"}, Hdrs1, _Body1}} =
         make_head("/subdir", [], Config)),
-    RedirectURL = "http://localhost:33081/subdir/",
-    ?line({"Location", RedirectURL} = lists:keyfind("Location", 1, Hdrs0)),
-    ?line({"Location", RedirectURL} = lists:keyfind("Location", 1, Hdrs1)).
+    RedirectURL0 = "http://localhost:33081/subdir/",
+    ?line({"Location", RedirectURL0} = lists:keyfind("Location", 1, Hdrs0)),
+    ?line({"Location", RedirectURL0} = lists:keyfind("Location", 1, Hdrs1)),
+    %% If the request contains a query-string we are expected to include
+    %% the query string in the the Location header of the 301 response.
+    ?line({ok, {{301, "Moved Permanently"}, Hdrs2, _Body2}} =
+        make_get("/subdir?foo=bar", [], Config)),
+    ?line({ok, {{301, "Moved Permanently"}, Hdrs3, _Body3}} =
+        make_head("/subdir?foo=bar", [], Config)),
+    RedirectURL1 = "http://localhost:33081/subdir/?foo=bar",
+    ?line({"Location", RedirectURL1} = lists:keyfind("Location", 1, Hdrs2)),
+    ?line({"Location", RedirectURL1} = lists:keyfind("Location", 1, Hdrs3)).
 
 subdir_not_listed(Config) ->
     ?line({ok, {{404, "Not Found"}, _Hdrs0, _Body}} =

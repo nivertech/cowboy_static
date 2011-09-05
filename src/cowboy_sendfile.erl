@@ -184,8 +184,7 @@ open_file_handle(Req0, Conf, #state{path=Path}=State) ->
 init_send_reply(Req, Conf, #state{ranges=[_]}=State) ->
     init_send_partial_response(Req, Conf, State);
 init_send_reply(Req, Conf, #state{ranges=[_|_]}=State) ->
-    %%init_send_multipart_response(Req, Conf, State);
-    init_send_complete_response(Req, Conf, State);
+    init_send_multipart_response(Req, Conf, State);
 init_send_reply(Req, Conf, #state{ranges=error}=State) ->
     init_send_complete_response(Req, Conf, State);
 init_send_reply(Req, Conf, State) ->
@@ -228,7 +227,8 @@ send_chunked_response_body(Req, Conf, State, FD, ChSize, N) ->
             send_chunked_response_body(Req, Conf, State, FD, ChSize, N-NBytes)
     end.
 
-
+%% If a byte-range request only contains one byte range, the contents of
+%% that range can be sent to the client using a normal response body.
 init_send_partial_response(Req0, Conf, State) ->
     #state{ranges=[{Start, End, Length}], finfo=FInfo} = State,
     #file_info{size=ContentLength} = FInfo,
@@ -239,6 +239,21 @@ init_send_partial_response(Req0, Conf, State) ->
         cowboy_sendfile_range:make_range(Start, End, ContentLength)],
     {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
     init_send_file_contents(Req1, Conf, State, Start, Length).
+
+%% If a byte-range request contains multiple ranges. The contents of
+%% the ranges must be sent as parts of a multipart response.
+init_send_multipart_response(Req0, Conf, State) ->
+    #state{ranges=Ranges, finfo=FInfo} = State,
+    #file_info{size=FileSize} = FInfo,
+    Boundary = cowboy_sendfile_multipart:make_boundary(),
+    ContentLen = cowboy_sendfile_multipart:content_length(Ranges, Boundary, FileSize),
+    ContentLenStr = integer_to_list(ContentLen),
+    Headers = [
+        {<<"Content-Type">>, <<"multipart/byteranges; boundary=", Boundary/binary>>},
+        {<<"Content-Length">>, ContentLenStr}],
+    {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
+    {ok, Req1, Conf}.
+
 
 %% Stream the contents of a file to a socket. This assumes that the response
 %% headers has been sent and the Content-Length header was set to 'Length'.

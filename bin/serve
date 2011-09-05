@@ -22,7 +22,7 @@ main(Args) ->
     StaticPrefix = [<<"hi">>],
     Dispatch = [
         %% {Host, list({Path, Handler, Opts})}
-        {'_', [cowboy_sendfile:make([
+        {'_', [cowboy_sendfile:rule([
             {dir, Dir},
             {prefix, [<<"hi">>]}
         ])]}],

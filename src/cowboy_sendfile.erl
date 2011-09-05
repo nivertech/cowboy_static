@@ -20,7 +20,7 @@
 -include_lib("cowboy/include/http.hrl").
 
 %% exported functions
--export([make/1]).
+-export([rule/1]).
 
 %% cowboy callbacks
 -export([init/3, handle/2, terminate/2]).
@@ -52,8 +52,8 @@
 
 %% @doc Return a cowboy dispatch rule.
 %% @end
--spec make([option()]) -> term().
-make(Opts) ->
+-spec rule([option()]) -> term().
+rule(Opts) ->
     {_, Dir} = lists:keyfind(dir, 1, Opts),
     Size = case lists:keyfind(chunk_size, 1, Opts) of
         {_, ISize} -> ISize;
@@ -84,7 +84,7 @@ make(Opts) ->
 init({tcp, http}, Req, Conf) when is_record(Conf, conf) ->
     {ok, Req, Conf};
 init({tcp, http}, Req, Opts) when is_list(Opts) ->
-    {_, _, Conf} = make(Opts),
+    {_, _, Conf} = rule(Opts),
     {ok, Req, Conf}.
 
 handle(Req, Conf) ->

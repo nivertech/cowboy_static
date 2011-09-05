@@ -107,7 +107,7 @@ init_per_group(Name, Config) ->
         {dir, Dir},
         {sendfile, use_sendfile(Name)},
         {chunk_size, 512}],
-    Dispatch = [{[<<"localhost">>], [cowboy_sendfile:make(StaticOpts)]}],
+    Dispatch = [{[<<"localhost">>], [cowboy_sendfile:rule(StaticOpts)]}],
     cowboy:start_listener(http, 100,
         cowboy_tcp_transport, [{port, Port}],
         cowboy_http_protocol, [{dispatch, Dispatch}]),

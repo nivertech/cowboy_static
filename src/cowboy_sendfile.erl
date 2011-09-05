@@ -105,7 +105,7 @@ method_allowed(Req0, Conf, State) ->
     end.
 
 validate_path(Req0, #conf{dir=Dir}=Conf, State) ->
-    {Path0, Req1} = cowboy_http_req:path(Req0),
+    {Path0, Req1} = cowboy_http_req:path_info(Req0),
     case abs_path(Dir, Path0) of
         invalid ->
             %% @todo Better response code?

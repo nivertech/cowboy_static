@@ -22,10 +22,10 @@ main(Args) ->
     StaticPrefix = [<<"hi">>],
     Dispatch = [
         %% {Host, list({Path, Handler, Opts})}
-        {'_', [{StaticMatch, cowboy_sendfile, [
+        {'_', [cowboy_sendfile:make([
             {dir, Dir},
-            {prefix, StaticPrefix},
-            {chunk_size, 16#FF}]}]}],
+            {prefix, [<<"hi">>]}
+        ])]}],
     {ok, Pid} = cowboy:start_listener({http, Port}, 100,
         cowboy_tcp_transport, [{port, Port}],
         cowboy_http_protocol, [{dispatch, Dispatch}]),

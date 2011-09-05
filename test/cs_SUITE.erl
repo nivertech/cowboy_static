@@ -260,7 +260,8 @@ ascii_hd_range(Config) ->
 multipart_halves(Config) ->
     ?line({ok, {{206, "Partial Content"}, _Hdrs, Body}} =
         make_get("/multipart_halves", [
-            {"Range", "bytes=0-1023,1024-2047"}], Config)).
+            {"Range", "bytes=0-1023,1024-2047"}], Config)),
+    ?line(2262 = byte_size(Body)).
 
 %% util functions
 

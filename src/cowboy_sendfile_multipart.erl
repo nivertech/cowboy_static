@@ -1,6 +1,7 @@
 -module(cowboy_sendfile_multipart).
 -export([make_boundary/0,
-         content_length/3]).
+         partial/3,
+         content_length/1]).
 
 -type range() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
 
@@ -11,55 +12,70 @@ make_boundary() ->
     <<"fkj49sn38dcn3">>.
 
 
-%% @doc Return the content length of a multipart response.
+%% @doc Return a partial response.
 %% The total size of the multipart response must be calculated before we begin
-%% sending it. We can do this by outputting everything except the actual ranges
-%% to a temporary buffer and adding the size of this buffer to the sum of the
-%% byte-ranges that we will send in the response.
+%% sending it. We can accomplish this by writing everything except the content
+%% of each range to a temprary buffer. The content_lengt/1 function is used to
+%% calculate the effective size based on this buffer. Callers are responsible
+%% for replacing occurances of range() terms in the response with the actual
+%% contents of the range.
 %% @end
--spec content_length([range()], binary(), non_neg_integer()) -> non_neg_integer().
-content_length(Ranges, Boundary, FileSize) ->
-    boundary_length(Ranges, Boundary) +
-    content_range_length(Ranges, FileSize) +
-    content_type_length(Ranges) +
-    (length(Ranges) * 4) + %% CRLF after headers and content
-    2. %% CRLF before first boundary
+-spec partial([range()], binary(), non_neg_integer()) -> [range() | iolist()].
+partial(Ranges, Boundary, FileSize) ->
+    %% Insert CRLF before the first boundary.
+    [<<"\r\n">>|partial_(Ranges, Boundary, FileSize)].
 
-content_range_length(Ranges, FileSize) ->
-    content_range_length(Ranges, FileSize, 0).
-
-content_range_length([], _FileSize, Sum) ->
-    Sum;
-content_range_length([{Start, End, Length}|T], FileSize, Sum) ->
+partial_([], Boundary, _FileSize) ->
+    %% A boundary string starting and ending with -- terminates the last section.
+    [[<<"--">>, Boundary, <<"--\r\n">>]];
+partial_([{Start, End, _}=H|T], Boundary, FileSize) ->
+    %% A boundary string starting with -- is written before each section.
+    PreBoundary = [<<"--">>, Boundary, <<"\r\n">>],
+    %% A Content-Range header defines the byte-range of this section.
     {_, RangeSpec} = cowboy_sendfile_range:make_range(Start, End, FileSize),
-    HeaderLen = 21 + byte_size(RangeSpec) + 2, %% "Content-Range: bytes " + ... + "\r\n"
-    content_range_length(T, FileSize, Sum + HeaderLen + Length).
+    ContentRangeHdr = [<<"Content-Range: bytes ">>, RangeSpec, <<"\r\n">>],
+    %% Use a default type header before MIME type support is implemented.
+    ContentTypeHdr = <<"Content-Type: application/octet-stream\r\n">>,
+    %% A CRLF separates the headers of each section from the content.
+    EndHeaders = <<"\r\n">>,
+    %% A CRLF separates the content from the boundary value.
+    EndContent = <<"\r\n">>,
+    BeforeRange = [
+        PreBoundary,
+        ContentRangeHdr,
+        ContentTypeHdr,
+        EndHeaders],
+    AfterRange = [
+        EndContent],
+    [BeforeRange,H,AfterRange|partial_(T, Boundary, FileSize)].
 
-content_type_length(Ranges) ->
-    NumRanges = length(Ranges),
-    NumRanges * byte_size(<<"Content-Type: application/octet-stream\r\n">>).
 
-boundary_length(Ranges, Boundary) ->
-    NumRanges = length(Ranges),
-    MidBoundaryLen = 2 + byte_size(Boundary) + 2, %% "--" + ... + "\r\n"
-    EndBoundaryLen = 2 + byte_size(Boundary) + 4, %% "--" + ... + "--\r\n"
-    (MidBoundaryLen * NumRanges) +  EndBoundaryLen.
+%% @doc Return the content length of a multipart response.
+%% The input is expected to be a partial response. All range() terms are
+%% expected to occur as an element of the top-level list of the response.
+%% @end
+-spec content_length([iolist() | range()]) -> non_neg_integer().
+content_length(Partial) ->
+    content_length(Partial, 0).
+
+content_length([], Sum) ->
+    Sum;
+content_length([{_,_,Length}|T], Sum) ->
+    content_length(T, Sum + Length);
+content_length([H|T], Sum) ->
+    content_length(T, Sum + iolist_size(H)).
 
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
 content_length0_test() ->
-    Ranges = [{0,5,6},{5,10,6}],
-    Boundary = <<"fkj49sn38dcn3">>,
-    FileSize = 73,
-    ?assertEqual(214, content_length(Ranges, Boundary, FileSize)).
+    Partial = partial([{0,5,6},{5,10,6}], <<"fkj49sn38dcn3">>, 73),
+    ?assertEqual(214, content_length(Partial)).
 
 content_length1_test() ->
-    Ranges = [{0,5,6},{5,10,6},{10,11,2}],
-    Boundary = <<"fkj49sn38dcn3">>,
-    FileSize = 73,
-    ?assertEqual(308, content_length(Ranges, Boundary, FileSize)).
+    Partial = partial([{0,5,6},{5,10,6},{10,11,2}], <<"fkj49sn38dcn3">>, 73),
+    ?assertEqual(308, content_length(Partial)).
 
 
 -endif.

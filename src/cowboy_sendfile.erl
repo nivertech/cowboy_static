@@ -246,11 +246,13 @@ init_send_multipart_response(Req0, Conf, State) ->
     #state{ranges=Ranges, finfo=FInfo} = State,
     #file_info{size=FileSize} = FInfo,
     Boundary = cowboy_sendfile_multipart:make_boundary(),
-    ContentLen = cowboy_sendfile_multipart:content_length(Ranges, Boundary, FileSize),
-    ContentLenStr = integer_to_list(ContentLen),
+    Partial = cowboy_sendfile_multipart:partial(Ranges, Boundary, FileSize),
+    ContentLength = cowboy_sendfile_multipart:content_length(Partial),
+    ContentLengthStr = integer_to_list(ContentLength),
+    ContentTypeStr = cowboy_sendfile_multipart:content_type(Boundary),
     Headers = [
-        {<<"Content-Type">>, <<"multipart/byteranges; boundary=", Boundary/binary>>},
-        {<<"Content-Length">>, ContentLenStr}],
+        {<<"Content-Type">>, ContentTypeStr},
+        {<<"Content-Length">>, ContentLengthStr}],
     {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
     {ok, Req1, Conf}.
 

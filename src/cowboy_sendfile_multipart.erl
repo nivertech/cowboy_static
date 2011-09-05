@@ -1,5 +1,6 @@
 -module(cowboy_sendfile_multipart).
 -export([make_boundary/0,
+         content_type/1,
          partial/3,
          content_length/1]).
 
@@ -10,6 +11,13 @@
 -spec make_boundary() -> binary().
 make_boundary() ->
     <<"fkj49sn38dcn3">>.
+
+
+%% @doc Return the value of the Content-Type header.
+%% @end
+-spec content_type(binary()) -> binary().
+content_type(Boundary) ->
+    <<"multipart/byteranges; boundary=", Boundary/binary>>.
 
 
 %% @doc Return a partial response.

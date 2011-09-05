@@ -219,10 +219,13 @@ below_static_root_esc(Config) ->
         make_head("/%2e%2e%2fcs_SUITE.erl", [], Config)).
 
 directory_redirect(Config) ->
-    ?line({ok, {{301, "Moved Permanently"}, _Hdrs0, _Body0}} =
+    ?line({ok, {{301, "Moved Permanently"}, Hdrs0, _Body0}} =
         make_get("/subdir", [], Config)),
-    ?line({ok, {{301, "Moved Permanently"}, _Hdrs1, _Body1}} =
-        make_head("/subdir", [], Config)).
+    ?line({ok, {{301, "Moved Permanently"}, Hdrs1, _Body1}} =
+        make_head("/subdir", [], Config)),
+    RedirectURL = "http://localhost:33081/subdir/",
+    ?line({"Location", RedirectURL} = lists:keyfind("Location", 1, Hdrs0)),
+    ?line({"Location", RedirectURL} = lists:keyfind("Location", 1, Hdrs1)).
 
 subdir_not_listed(Config) ->
     ?line({ok, {{404, "Not Found"}, _Hdrs0, _Body}} =

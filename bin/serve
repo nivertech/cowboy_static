@@ -18,7 +18,17 @@ main(Args) ->
     #opts{port=Port, dir=Dir} = Opts,
     ok = noise("Using current working directory ~s~n", [filename:join(Dir)]),
     ok = noise("Using port ~.10B~n", [Port]),
-    {ok, Pid} = cowboy_sendfile_example:start(Dir, Port),
+    StaticMatch = [<<"hi">>, '_'],
+    StaticPrefix = [<<"hi">>],
+    Dispatch = [
+        %% {Host, list({Path, Handler, Opts})}
+        {'_', [{StaticMatch, cowboy_sendfile, [
+            {dir, Dir},
+            {prefix, StaticPrefix},
+            {chunk_size, 16#FF}]}]}],
+    {ok, Pid} = cowboy:start_listener({http, Port}, 100,
+        cowboy_tcp_transport, [{port, Port}],
+        cowboy_http_protocol, [{dispatch, Dispatch}]),
     ok = noise("Server running at http://localhost:~.10B/~n", [Port]),
     MRef = erlang:monitor(process, Pid),
     receive {'DOWN', MRef, process, _, _} -> ok end.

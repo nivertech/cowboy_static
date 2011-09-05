@@ -120,15 +120,15 @@ validate_resource_type(Req0, Conf, #state{finfo=FInfo}=State) ->
         #file_info{type=regular} ->
             validate_resource_access(Req1, Conf, State);
         #file_info{type=directory} when LastChar =:= $/ ->
-            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req1),
-            {ok, Req1, Conf};
+            {ok, Req2} = cowboy_http_req:reply(404, [], <<>>, Req1),
+            {ok, Req2, Conf};
         #file_info{type=directory} when LastChar =/= $/ ->
             %% @todo Location header
-            {ok, Req1} = cowboy_http_req:reply(301, [], <<>>, Req1),
-            {ok, Req1, Conf};
+            {ok, Req2} = cowboy_http_req:reply(301, [], <<>>, Req1),
+            {ok, Req2, Conf};
         _Other ->
-            {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req1),
-            {ok, Req1, Conf}
+            {ok, Req2} = cowboy_http_req:reply(404, [], <<>>, Req1),
+            {ok, Req2, Conf}
     end.
 
 validate_resource_access(Req0, Conf, #state{finfo=FInfo}=State) ->
@@ -248,13 +248,27 @@ init_send_multipart_response(Req0, Conf, State) ->
     Boundary = cowboy_sendfile_multipart:make_boundary(),
     Partial = cowboy_sendfile_multipart:partial(Ranges, Boundary, FileSize),
     ContentLength = cowboy_sendfile_multipart:content_length(Partial),
-    ContentLengthStr = integer_to_list(ContentLength),
+    ContentLengthStr = list_to_binary(integer_to_list(ContentLength)),
     ContentTypeStr = cowboy_sendfile_multipart:content_type(Boundary),
     Headers = [
         {<<"Content-Type">>, ContentTypeStr},
         {<<"Content-Length">>, ContentLengthStr}],
     {ok, Req1} = cowboy_http_req:reply(206, Headers, <<>>, Req0),
-    {ok, Req1, Conf}.
+    #http_req{socket=Socket, transport=Transport} = Req1,
+    send_multipart_response(Req1, Conf, State, Partial, Transport, Socket).
+
+
+send_multipart_response(Req, Conf, _State, [], _Transport, _Socket) ->
+    {ok, Req, Conf};
+
+send_multipart_response(Req0, Conf, State, [{_,_,_}=H|T], Transport, Socket) ->
+    {Start, _, Length} = H,
+    {ok, Req1, _} = init_send_file_contents(Req0, Conf, State, Start, Length),
+    send_multipart_response(Req1, Conf, State, T, Transport, Socket);
+
+send_multipart_response(Req, Conf, State, [IOList|T], Transport, Socket) ->
+    ok = Transport:send(Socket, IOList),
+    send_multipart_response(Req, Conf, State, T, Transport, Socket).
 
 
 %% Stream the contents of a file to a socket. This assumes that the response
@@ -273,7 +287,7 @@ init_send_file_contents(Req, Conf, State, Start, Length) ->
 
 
 send_file_contents(Req, Conf, State, Transport, Socket, FD, ChunkSize, 0) ->
-    file:close(FD),
+    %% file:close(FD),
     {ok, Req, Conf};
 send_file_contents(Req1, Conf, State, Transport, Socket, FD, ChunkSize, N) ->
     NBytes = if N < ChunkSize -> N; true -> ChunkSize end,

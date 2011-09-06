@@ -41,6 +41,8 @@
     method :: 'GET' | 'HEAD',
     path   :: [binary()],
     finfo  :: #file_info{},
+    fname  :: binary(),
+    ctype  :: binary(),
     ranges :: [{uint(), uint(), uint()}],
     fd     :: term()}).
 
@@ -115,13 +117,14 @@ validate_path(Req0, #conf{dir=Dir}=Conf, State) ->
             validate_path_allowed(Req1, Conf, State#state{path=Path1})
     end.
 
-validate_path_allowed(Req0, #conf{dir=Dir}=Conf, #state{path=Path}=State) ->
+validate_path_allowed(Req0, #conf{dir=Dir}=Conf, #state{path=Path}=State0) ->
     case lists:prefix(Dir, Path) of
         false ->
             {ok, Req1} = cowboy_http_req:reply(404, [], <<>>, Req0),
             {ok, Req1, Conf};
         true ->
-            resource_exists(Req0, Conf, State#state{path=filename:join(Path)})
+            State1 = State0#state{fname=lists:last(Path), path=filename:join(Path)},
+            resource_exists(Req0, Conf, State1)
     end.
 
 resource_exists(Req0, Conf, #state{path=Path}=State) ->
@@ -186,13 +189,17 @@ validate_resource_type(Req0, Conf, #state{finfo=FInfo}=State) ->
 validate_resource_access(Req0, Conf, #state{finfo=FInfo}=State) ->
     case FInfo of
         #file_info{access=read} ->
-            range_header_exists(Req0, Conf, State);
+            detect_content_type(Req0, Conf, State);
         #file_info{access=read_write} ->
-            range_header_exists(Req0, Conf, State);
+            detect_content_type(Req0, Conf, State);
         _Other ->
             {ok, Req1} = cowboy_http_req:reply(403, [], <<>>, Req0),
             {ok, Req1, Conf}
     end.
+
+detect_content_type(Req, Conf, #state{fname=Filename}=State) ->
+    ContentType = cowboy_sendfile_mime:filename(Filename),
+    range_header_exists(Req, Conf, State#state{ctype=ContentType}).
 
 range_header_exists(Req0, Conf, #state{finfo=FInfo}=State) when Conf#conf.ranges ->
     #file_info{size=ContentLength} = FInfo,

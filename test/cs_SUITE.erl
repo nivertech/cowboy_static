@@ -31,7 +31,8 @@
          subdir_file_access/1]).
 
 %% content test functions
--export([ascii_one_chunk/1,
+-export([pdf_content_type/1,
+         ascii_one_chunk/1,
          ascii_two_chunks/1,
          ascii_hd_range/1,
          multipart_halves/1]).
@@ -50,6 +51,7 @@ groups() ->
         directory_redirect,
         subdir_not_listed,
         subdir_file_access,
+        pdf_content_type,
         ascii_one_chunk,
         ascii_two_chunks,
         ascii_hd_range,
@@ -77,12 +79,14 @@ init_per_suite(Config) ->
     ok = application:start(public_key),
     ok = application:start(ssl),
     ok = application:start(lhttpc),
+    ok = application:start(mimetypes),
     ok = application:start(cowboy),
     Config.
 
 
 end_per_suite(_Config) ->
     ok = application:stop(cowboy),
+    ok = application:stop(mimetypes),
     ok = application:stop(lhttpc),
     ok = application:stop(ssl),
     ok = application:stop(public_key),
@@ -139,6 +143,9 @@ when Name =:= subdir_not_listed; Name =:= subdir_file_access
     ok = file:write_file(File, "subfile-contents\n"),
     [{ref_subdir, Subdir},{ref_file,File}|Config];
 
+init_per_testcase(pdf_content_type=Name, Config) ->
+    init_test_file('test.pdf', cs_rfile:make(512, <<"pdf">>), Config);
+
 init_per_testcase(ascii_one_chunk=Name, Config) ->
     init_test_file(Name, cs_rfile:make(512, <<"abcd">>), Config);
 
@@ -165,6 +172,9 @@ when Name =:= subdir_not_listed; Name =:= subdir_file_access
     File = ?config(ref_file, Config),
     ok = file:delete(File),
     ok = file:del_dir(Subdir);
+
+end_per_testcase(pdf_content_type, Config) ->
+    end_test_file('test.pdf', Config);
 
 end_per_testcase(ascii_one_chunk, Config) ->
     end_test_file(ascii_one_chunk, Config);
@@ -250,6 +260,11 @@ subdir_file_access(Config) ->
 
 %% content test functions
 
+pdf_content_type(Config) ->
+    ?line({ok, {{200, "OK"}, Hdrs0, _Body0}} =
+        make_get("/test.pdf", [], Config)),
+    ?line({_, "application/pdf"} = lists:keyfind("Content-Type", 1, Hdrs0)).
+
 ascii_one_chunk(Config) ->
     ?line({ok, {{200, "OK"}, _Hdrs, Body}} =
         make_get("/ascii_one_chunk", [], Config)),
@@ -288,7 +303,12 @@ build_url(Path, Config) ->
 
 make_get(Path, Headers, Config) ->
     URL = build_url(Path, Config),
-    lhttpc:request(URL, 'GET', Headers, infinity).
+    case lhttpc:request(URL, 'GET', Headers, infinity) of
+        {ok, {ResponseStatus, ResponseHeaders, Body}}=Ret ->
+            ct:log(default, "<h2>Status</h2>~p~n", [ResponseStatus]),
+            ct:log(default, "<h2>Headers</h2>~p~n", [ResponseHeaders]),
+            Ret
+    end.
 
 make_head(Path, Headers, Config) ->
     URL = build_url(Path, Config),

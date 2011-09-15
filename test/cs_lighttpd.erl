@@ -36,7 +36,9 @@ make_config(Port, Dir) ->
         ?fmt("server.bind = \"localhost\"", []),
         ?fmt("server.port = ~.10B", [Port]),
         ?fmt("server.document-root = \"~s\"", [Dir]),
-        ?fmt("server.pid-file = \"~s\"", [PidFile])
+        ?fmt("server.pid-file = \"~s\"", [PidFile]),
+        %% lighttpd needs to be configured with a set of known mimetypes.
+        ?fmt("mimetype.assign = (\".pdf\"  => \"application/pdf\")", [])
     ],
     BinConfigLines = [iolist_to_binary(Line) || Line <- IOConfigLines],
     StrConfigLines = [binary_to_list(Line) || Line <- BinConfigLines],

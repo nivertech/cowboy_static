@@ -34,7 +34,9 @@
     prefix   :: [binary()],
     csize    :: pos_integer(),
     ranges   :: boolean(),
-    usesfile :: boolean()}).
+    usesfile :: boolean(),
+    mimemod  :: atom(),
+    mimearg  :: term()}).
 
 %% handler state
 -record(state, {
@@ -50,7 +52,8 @@
    :: {prefix, [binary()]}
     | {chunk_size, pos_integer()}
     | {ranges, boolean()}
-    | {sendfile, boolean()}.
+    | {sendfile, boolean()}
+    | {mimetypes, atom(), term()}.
 
 %% @doc Return a cowboy dispatch rule.
 %% @end
@@ -73,12 +76,18 @@ rule(Opts) ->
         {_, ISendfile} -> ISendfile;
         false -> true
     end,
+    {MimeMod, MimeArg} = case lists:keyfind(mimetypes, 1, Opts) of
+        {_, IMimeMod, IMimeArg} -> {IMimeMod, IMimeArg};
+        false -> {mimetypes, default}
+    end,
     Conf = #conf{
         dir=Dir,
         csize=Size,
         prefix=Prefix,
         ranges=Ranges,
-        usesfile=Sendfile},
+        usesfile=Sendfile,
+        mimemod=MimeMod,
+        mimearg=MimeArg},
     Pattern = Prefix ++ ['...'],
     {Pattern, ?MODULE, Conf}.
 
@@ -198,8 +207,23 @@ validate_resource_access(Req0, Conf, #state{finfo=FInfo}=State) ->
     end.
 
 detect_content_type(Req, Conf, #state{fname=Filename}=State) ->
-    ContentType = cowboy_sendfile_mime:filename(Filename),
-    range_header_exists(Req, Conf, State#state{ctype=ContentType}).
+    #conf{mimemod=MimeMod, mimearg=MimeArg} = Conf,
+    Default = <<"application/octet-stream">>,
+    case filename:extension(Filename) of
+        <<>> ->
+            range_header_exists(Req, Conf, State#state{ctype=Default});
+        <<$.,Ext/binary>> ->
+            case MimeMod:ext_to_mimes(Ext, MimeArg) of
+                [] ->
+                    range_header_exists(Req, Conf, State#state{ctype=Default});
+                [H|_] ->
+                    range_header_exists(Req, Conf, State#state{ctype=H});
+                Other ->
+                    exit({detect_content, Other})
+            end;
+        Other ->
+            exit({detect_content, Other})
+    end.
 
 range_header_exists(Req0, Conf, #state{finfo=FInfo}=State) when Conf#conf.ranges ->
     #file_info{size=ContentLength} = FInfo,
@@ -251,11 +275,12 @@ init_send_reply(Req, Conf, State) ->
 
 
 init_send_complete_response(Req0, Conf, State) ->
-    #state{finfo=FInfo, path=Path} = State,
+    #state{finfo=FInfo, path=Path, ctype=CType} = State,
     #file_info{size=ContentLength} = FInfo,
     BinContentLength = list_to_binary(integer_to_list(ContentLength)),
     Headers = [
-        {<<"Content-Length">>, BinContentLength}],
+        {<<"Content-Length">>, BinContentLength},
+        {<<"Content-Type">>, CType}],
     {ok, Req1} = cowboy_http_req:reply(200, Headers, <<>>, Req0),
     %% The response to a HEAD Request is expected to be the same as a GET
     %% except for the lack of a Response body. Stop right before sending
